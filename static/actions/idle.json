@@ -1,0 +1,45 @@
+{
+  "name": "idle",
+  "label": "待机",
+  "icon": "🌿",
+  "pool": "idle",
+  "weight": 6.0,
+  "role": "action",
+  "canvas": [
+    300,
+    300
+  ],
+  "size": {
+    "first": {
+      "left": 13,
+      "right": 174,
+      "top": 15,
+      "bottom": 279,
+      "width": 161,
+      "height": 264
+    },
+    "last": {
+      "left": 13,
+      "right": 173,
+      "top": 15,
+      "bottom": 279,
+      "width": 160,
+      "height": 264
+    },
+    "union": {
+      "left": 0,
+      "right": 184,
+      "top": 11,
+      "bottom": 279,
+      "width": 184,
+      "height": 268
+    },
+    "scale": 0.636145,
+    "target_height": 264,
+    "footline": 279,
+    "reference": "first"
+  },
+  "frames": 152,
+  "seconds": 10.13,
+  "source": "minimax-h3-1793102837566230.mp4"
+}

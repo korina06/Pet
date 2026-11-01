@@ -1,0 +1,197 @@
+{
+  "_comment": [
+    "检索质量的 golden set（第 54 步）。用菜名而不是 id，这样重导入种子后用例不会失效。",
+    "用法：python scripts/eval_retrieval.py",
+    "字段说明：",
+    "  args            : 一次**正确**的工具调用（模型该拆出来的参数）",
+    "  expect          : 人工认可的 2~3 道（用于 recall / MRR）",
+    "  must            : 机械可判定的约束，返回项必须 100% 满足",
+    "  expect_zero     : 这条查询本来就该查不到（用于零命中准确率）",
+    "  expect_relaxed  : 这条查询注定要放宽，工具必须说明放宽了什么"
+  ],
+  "cases": [
+    {
+      "id": "spicy-chicken",
+      "query": "有没有辣的鸡肉",
+      "args": {"tags": ["辣"], "ingredients": ["鸡肉"]},
+      "expect": ["宫保鸡丁", "宁都三杯鸡", "大盘鸡"],
+      "must": {"tags_any": ["辣", "微辣"], "text_any": ["鸡"], "forbid_text": ["鸡蛋"]}
+    },
+    {
+      "id": "light-fish",
+      "query": "清淡点的鱼",
+      "args": {"tags": ["清淡"], "ingredients": ["鱼"]},
+      "expect": ["清蒸鲈鱼", "清蒸武昌鱼"],
+      "must": {"tags_all": ["清淡"], "text_any": ["鱼"], "forbid_text": ["鱼香"]}
+    },
+    {
+      "id": "tofu",
+      "query": "想吃豆腐",
+      "args": {"ingredients": ["豆腐"]},
+      "expect": ["麻婆豆腐", "长沙臭豆腐", "煎毛豆腐"],
+      "must": {"text_any": ["豆腐"]}
+    },
+    {
+      "id": "noodle-staple",
+      "query": "有什么主食的面",
+      "args": {"tags": ["主食"], "ingredients": ["面食"]},
+      "expect": ["重庆小面", "刀削面", "兰州牛肉面"],
+      "must": {"tags_all": ["主食"], "text_any": ["面"]}
+    },
+    {
+      "id": "under-30",
+      "query": "30 分钟内能做好",
+      "args": {"max_minutes": 30},
+      "expect": ["麻婆豆腐", "清蒸鲈鱼", "辣椒炒肉（农家小炒肉）"],
+      "must": {"max_minutes": 30}
+    },
+    {
+      "id": "over-30-slow",
+      "query": "有时间慢慢做",
+      "args": {"min_minutes": 30},
+      "expect": ["东坡肉", "佛跳墙（家常简化版）", "北京烤鸭（家庭烤箱版）"],
+      "must": {"min_minutes": 30}
+    },
+    {
+      "id": "sichuan",
+      "query": "想吃川菜",
+      "args": {"tags": ["川菜"]},
+      "expect": ["麻婆豆腐", "回锅肉", "宫保鸡丁"],
+      "must": {"tags_all": ["川菜"]}
+    },
+    {
+      "id": "vegetarian",
+      "query": "想吃素",
+      "args": {"tags": ["素"]},
+      "expect": ["油焖春笋", "长沙臭豆腐", "煎毛豆腐"],
+      "must": {"tags_all": ["素"]}
+    },
+    {
+      "id": "roasted",
+      "query": "有没有烤的",
+      "args": {"tags": ["烤"]},
+      "expect": ["蜜汁叉烧", "北京烤鸭（家庭烤箱版）", "葡式蛋挞"],
+      "must": {"tags_all": ["烤"]}
+    },
+    {
+      "id": "soup",
+      "query": "想喝汤",
+      "args": {"tags": ["汤"]},
+      "expect": ["老火靓汤 · 玉米胡萝卜猪骨汤", "排骨藕汤", "瓦罐肉饼汤"],
+      "must": {"tags_all": ["汤"]}
+    },
+    {
+      "id": "no-seafood",
+      "query": "随便推荐，我海鲜过敏",
+      "args": {"exclude": ["海鲜"]},
+      "expect": ["麻婆豆腐", "宫保鸡丁", "回锅肉"],
+      "must": {"forbid_text": ["虾", "蟹", "鲈鱼", "海参", "扇贝"]}
+    },
+    {
+      "id": "no-cilantro",
+      "query": "不要香菜",
+      "args": {"exclude": ["香菜"]},
+      "expect": ["麻婆豆腐", "白切鸡", "宫保鸡丁"],
+      "must": {"forbid_text": ["香菜"]}
+    },
+    {
+      "id": "zero-truffle",
+      "query": "有没有松露",
+      "args": {"keyword": "松露"},
+      "expect": [],
+      "expect_zero": true
+    },
+    {
+      "id": "relax-spicy-cantonese",
+      "query": "辣一点的粤菜鱼",
+      "args": {"tags": ["辣", "粤菜"], "ingredients": ["鱼"]},
+      "expect": ["清蒸鲈鱼"],
+      "must": {"tags_all": ["粤菜"], "text_any": ["鱼"]},
+      "expect_relaxed": true
+    },
+    {
+      "id": "beef-noodles",
+      "query": "牛肉面",
+      "args": {"tags": ["主食"], "ingredients": ["牛肉"]},
+      "expect": ["台湾牛肉面", "兰州牛肉面"],
+      "must": {"tags_all": ["主食"], "text_any": ["牛"]}
+    },
+    {
+      "id": "eggs",
+      "query": "有鸡蛋的菜",
+      "args": {"ingredients": ["蛋"]},
+      "expect": ["煎饼果子", "葡式蛋挞", "海蛎煎（蚵仔煎）"],
+      "must": {"text_any": ["蛋"]}
+    },
+    {
+      "id": "quick-spicy",
+      "query": "20 分钟内，辣的",
+      "args": {"tags": ["辣"], "max_minutes": 20},
+      "expect": ["麻婆豆腐", "辣椒炒肉（农家小炒肉）", "酸辣粉"],
+      "must": {"tags_any": ["辣", "微辣"], "max_minutes": 20}
+    },
+    {
+      "id": "breakfast",
+      "query": "早餐吃什么",
+      "args": {"tags": ["早餐"]},
+      "expect": ["煎饼果子", "武汉热干面", "蒙古锅茶"],
+      "must": {"tags_all": ["早餐"]}
+    },
+    {
+      "id": "nourishing-soup",
+      "query": "养胃的汤",
+      "args": {"tags": ["汤", "养胃"]},
+      "expect": ["老火靓汤 · 玉米胡萝卜猪骨汤", "瓦罐肉饼汤", "排骨藕汤"],
+      "must": {"tags_all": ["汤", "养胃"]}
+    },
+    {
+      "id": "fujian",
+      "query": "闽菜有什么",
+      "args": {"tags": ["闽菜"]},
+      "expect": ["佛跳墙（家常简化版）", "荔枝肉", "海蛎煎（蚵仔煎）"],
+      "must": {"tags_all": ["闽菜"]}
+    },
+    {
+      "id": "sweet-snack",
+      "query": "甜的、当加餐",
+      "args": {"tags": ["加餐", "素"]},
+      "expect": ["姜撞奶", "杨枝甘露", "葡式蛋挞"],
+      "must": {"tags_all": ["加餐", "素"]}
+    },
+    {
+      "id": "under-15",
+      "query": "15 分钟内能做好",
+      "args": {"max_minutes": 15},
+      "expect": ["白灼虾", "麻婆豆腐", "葱烧海参（简化家常版）"],
+      "must": {"max_minutes": 15}
+    },
+    {
+      "id": "chicken-not-egg",
+      "query": "想吃鸡",
+      "args": {"ingredients": ["鸡肉"]},
+      "expect": ["白切鸡", "宫保鸡丁", "宁都三杯鸡"],
+      "must": {"text_any": ["鸡"], "forbid_text": ["鸡蛋"]}
+    },
+    {
+      "id": "keyword-name",
+      "query": "三杯鸡",
+      "args": {"keyword": "三杯鸡"},
+      "expect": ["宁都三杯鸡"],
+      "must": {"text_any": ["三杯鸡"]}
+    },
+    {
+      "id": "hunan",
+      "query": "湘菜有什么",
+      "args": {"tags": ["湘菜"]},
+      "expect": ["剁椒鱼头", "辣椒炒肉（农家小炒肉）", "长沙臭豆腐"],
+      "must": {"tags_all": ["湘菜"]}
+    },
+    {
+      "id": "must-have-meat",
+      "query": "想吃点肉的",
+      "args": {"ingredients": ["猪肉"]},
+      "expect": ["回锅肉", "本帮红烧肉", "毛氏红烧肉"],
+      "must": {"text_any": ["肉"]}
+    }
+  ]
+}

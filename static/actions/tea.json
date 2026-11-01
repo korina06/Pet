@@ -1,0 +1,45 @@
+{
+  "name": "tea",
+  "label": "喝茶",
+  "icon": "🍵",
+  "pool": "manual",
+  "weight": 1.0,
+  "role": "action",
+  "canvas": [
+    300,
+    300
+  ],
+  "size": {
+    "first": {
+      "left": 45,
+      "right": 213,
+      "top": 15,
+      "bottom": 285,
+      "width": 168,
+      "height": 270
+    },
+    "last": {
+      "left": 1,
+      "right": 213,
+      "top": 15,
+      "bottom": 292,
+      "width": 212,
+      "height": 277
+    },
+    "union": {
+      "left": 0,
+      "right": 226,
+      "top": 14,
+      "bottom": 294,
+      "width": 226,
+      "height": 280
+    },
+    "scale": 0.594714,
+    "target_height": 270,
+    "footline": 285,
+    "reference": "first"
+  },
+  "frames": 152,
+  "seconds": 10.13,
+  "source": "minimax-h3-1792950644395894.mp4"
+}

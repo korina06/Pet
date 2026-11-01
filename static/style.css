@@ -1,0 +1,3694 @@
+/* karo · 桌宠的样式。
+
+常驻页面上的只有桌宠；点它才展开轮盘菜单（只朝左上，避免溢出屏幕），对话面板浮在左侧。
+配色统一走自定义属性，便于整体换肤。 */
+
+:root {
+  --bg: #ffffff;
+  --fg: #1f2328;
+  --fg-soft: #6b7280;
+  --line: #e6e8eb;
+  --surface: #ffffff;
+  --surface-soft: #f6f7f9;
+  --accent: #4f7cf7;
+  --accent-soft: #eef3ff;
+  --danger: #d64545;
+  --danger-soft: #fdf0f0;
+  --shadow-pet: 0 6px 20px rgba(15, 23, 42, .16);
+  --shadow-panel: 0 10px 40px rgba(15, 23, 42, .14);
+
+  /* 桌宠按钮尺寸：与图片同比例的 3:2 横版，且比上一版（76x76）明显放大，
+     让画面在屏幕上占更大面积。窄屏会在媒体查询里改小。
+     120x80 而非 112x75：后者高度只有 75px，比原版 76px 还小 1px，
+     虽然面积更大，但"放大"应该长宽都确实变大才不含糊。 */
+  /* 第 153 步：素材换成 **webm VP9-alpha**（225x300 = 0.750），
+     静帧是从同一段视频的第一帧导出的 —— 同一归一化画布，切换不跳。
+     `.pet-body` 的比例必须与素材一致，object-fit: cover 才不会裁掉头脚。 */
+  --pet-w: 150px;
+  --pet-h: 150px;
+  --pet-radius: 22px;
+
+  /* 环绕小圆（第 39 步）：子功能做成绕桌宠上方的对称扇形。
+     --wheel-btn 是小圆直径；--orbit 是「桌宠中心 → 小圆中心」的距离。
+     两者要留出间隙，小圆才不会压到桌宠本体上。
+     半径 110 而非 96：96 时相邻圆心距仅 49.7px，而小圆直径 46px，
+     只剩 3.7px 空隙，看起来挤在一起、像间距不均。 */
+  --wheel-btn: 46px;
+  --orbit: 110px;
+
+  /* 轮盘整体水平平移（第 258 步）：karo 素材的可视中心不在画布正中。
+     pet.png 是 300×300，alpha 包围盒中心在 x=104.5（画布中心 150），
+     显示成 150px 时**偏左 22.8px**。小圆若按画布中心排，视觉上会整体偏右；
+     所以把整个轮盘左移同样的距离，让它与「看得见的 karo」同心。
+     桌宠本身不动（这里只改 .wheel 的 left 基准）。 */
+  --wheel-shift-x: -23px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d;
+    --fg: #e8eaed;
+    --fg-soft: #9aa1ab;
+    --line: #2b2f36;
+    --surface: #1e2127;
+    --surface-soft: #24282f;
+    --accent: #7ea2ff;
+    --accent-soft: #232c40;
+    --danger: #ff8080;
+    --danger-soft: #33232a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+/* 关键：必须放在所有组件规则之前声明意图，但优先级靠 !important 保证。
+   浏览器默认的 [hidden]{display:none} 会被组件自己的 display:flex 之类压过去，
+   于是给元素加 hidden 属性会失效（曾导致：聊天框一直显示、点 × 关不掉）。
+   任何组件都不要再自己写 display 来对抗这条。 */
+[hidden] { display: none !important; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.6 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  overflow: hidden;
+}
+
+.noscript {
+  margin: 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--fg-soft);
+}
+
+/* ----------------------------------------------------- 弹出小窗的公共部分 */
+
+/* 小窗里的正文容器（第 209 步删掉侧边栏后，「关于」「设置」两个小窗也没了，
+   这里只剩仍在小窗里复用的公共样式） */
+.dialog-body {
+  width: 100%;
+}
+
+/* 小窗里的说明小字 */
+
+/* ------------------------------------------------------------ 登入窗口 */
+
+/* 覆盖整个视口并居中，点背景可关闭 */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;                /* 高于桌宠(30) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, .35);
+}
+
+.modal-box {
+  position: relative;
+  width: min(320px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 26px 22px 20px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+/* 出行的窗口：尺寸按用户画的框（占可视区约 2/3 宽、2/3 高）定，
+   并用 vw/vh 兜住，小屏幕也不会溢出到看不见。 */
+.modal-box--travel {
+  width: min(1100px, 92vw);
+  min-height: min(820px, 90vh);
+  max-height: 94vh;
+  align-items: stretch;
+  overflow-y: auto;
+}
+
+/* ---------------------------------------------- 命令行风格（仅出行窗口内） */
+
+/* 只作用于 .terminal 内部：等宽字体 + 灰底 + 方框分隔线。
+   配色走下面这组 `--term-*` 作用域变量（第 42 步）：
+   这一整段原来是硬编码的浅色值，所以系统切到「暗」时出行窗口还是亮的。
+   处理办法与签到窗口一致（见 .modal-box--checkin）：作用域变量 + 深色覆盖。
+   浅色下的取值与原值**逐字相同**，所以浅色主题不会有任何视觉变化；
+   深色下面板底比卡片更深一档，保住"命令行终端"的观感，而不是照抄页面底色。
+   `color-scheme` 是必须的：表单里有 <input type="date"> 与 <select>，
+   不声明的话原生日历/下拉在深色系统下仍是亮的，会跟面板脱节。 */
+.terminal {
+  --term-bg: #e9ecef;
+  --term-card: #f1f3f5;
+  --term-input: #fff;
+  --term-tab-bg: #eef1f4;
+  --term-hover: #f8f9ff;
+  --term-placeholder: #f8fafc;
+  --term-disabled-bg: #e5e7eb;
+  --term-line: #cbd5e1;
+  --term-line-soft: #e2e8f0;
+  --term-line-2: #d7dbe0;
+  --term-fg: #1f2937;
+  --term-heading: #111827;
+  --term-muted: #6b7280;
+  --term-muted-2: #4b5563;
+  --term-faint: #9ca3af;
+
+  color-scheme: light;
+  background: var(--term-bg);
+  color: var(--term-fg);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+/* 系统主题是「暗」时覆盖同一组变量。变量在 .terminal 上定义、只影响它的后代，
+   所以页面其它部分（侧边栏、对话面板、轮盘…）不受影响。 */
+@media (prefers-color-scheme: dark) {
+  .terminal {
+    --term-bg: #191c21;
+    --term-card: #24282f;
+    --term-input: #2a2f37;
+    --term-tab-bg: #22262d;
+    --term-hover: #262b33;
+    --term-placeholder: #22262d;
+    --term-disabled-bg: #2b3038;
+    --term-line: #3a4048;
+    --term-line-soft: #2f353d;
+    --term-line-2: #3a4048;
+    --term-fg: #e8eaed;
+    --term-heading: #f2f4f7;
+    --term-muted: #9aa1ab;
+    --term-muted-2: #b8bfc8;
+    --term-faint: #7b838d;
+
+    color-scheme: dark;
+  }
+}
+
+.terminal .modal-title {
+  color: var(--term-heading);
+  letter-spacing: .04em;
+}
+
+/* 标签页：像命令行的两个"子界面" */
+.tabs {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  margin: 0 0 14px;
+  border-bottom: 1px solid var(--term-line);
+}
+
+.tab {
+  margin: 0 0 -1px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--term-muted-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tab.is-active {
+  border-color: var(--term-line);
+  border-bottom-color: #e9ecef;   /* 与面板底色接上，像"当前页" */
+  background: var(--term-bg);
+  color: var(--term-heading);
+  font-weight: 600;
+}
+
+/* 可关闭的标签（计划概览 / 第x天）：文字与 × 分开成两个按钮，
+   这样点 × 只关标签，不会顺带切过去（第 30 步）。 */
+.tab--closable {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px 0 0;
+  border-color: var(--term-line);
+  background: var(--term-tab-bg);
+}
+
+.tab-label {
+  padding: 7px 4px 7px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tab-close {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--term-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tab-close:hover,
+.tab-close:focus-visible {
+  background: var(--term-line-2);
+  color: var(--term-heading);
+  outline: none;
+}
+
+.tab--closable .tab-label:focus-visible { outline: none; }
+.tab--closable.is-active { background: var(--term-bg); }
+
+.tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.tab-page { width: 100%; }
+
+/* 表单：整体纵向排列，里面按卡片分组（第 26 步按参考图重排） */
+.travel-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+/* 第 220 步：表单页开头的一句说明，把「聊聊」和「自己填」的关系写清楚 */
+
+/* 分组卡片：标题 + 分隔线 + 内容，和参考图一致 */
+.tcard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px 18px;
+  border: 1px solid var(--term-line-soft);
+  border-radius: 12px;
+  background: var(--term-card);
+}
+
+.tcard-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--term-line-2);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--term-heading);
+}
+
+.tcard-icon { font-size: 15px; }
+
+/* 卡片内的字段网格 */
+.tgrid {
+  display: grid;
+  gap: 12px 18px;
+}
+
+/* 目的地与日期：城市 / 开始 / 结束 / 天数 一行四项，和参考图一致 */
+.tgrid--dest { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* 偏好设置：交通 / 住宿 / 旅行偏好（最后一项更宽） */
+.tgrid--prefs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+@media (max-width: 900px) {
+  .tgrid--dest { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tgrid--prefs { grid-template-columns: 1fr; }
+}
+
+.tfield {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.tlabel {
+  font-size: 12px;
+  color: var(--term-muted-2);
+  letter-spacing: .02em;
+}
+
+.treq { color: var(--danger); }
+
+/* 表单里的说明文字：小一号、灰一点，别和正文抢注意力 */
+
+.tinput {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--term-line);
+  border-radius: 7px;
+  background: var(--term-input);
+  color: var(--term-heading);
+  font: inherit;
+  font-size: 13px;
+}
+
+.tinput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+textarea.tinput { resize: vertical; }
+
+/* 旅行天数徽标：不可编辑，做成参考图里那种醒目的紫色横条 */
+.tdays {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 35px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.tdays:empty {
+  background: var(--term-disabled-bg);
+  color: var(--term-faint);
+}
+
+.tdays:empty::before { content: "—"; }
+
+/* 旅行偏好：多选，两列排开 */
+.tfield--prefs {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pref-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  margin-top: 2px;
+}
+
+.pref {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--term-fg);
+  cursor: pointer;
+}
+
+.travel-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+/* 第 197 步（评价15 B2）：上次行程的「接着看」提示条。
+   用中性色而不是告警色 —— 它不是错误，是一份还留着的工作。 */
+.travel-resume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(99, 102, 241, 0.08);
+  font-size: 12px;
+}
+
+.travel-resume[hidden] {
+  display: none;
+}
+
+.travel-resume-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.travel-resume-btn {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid rgba(99, 102, 241, 0.5);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.travel-resume-btn--quiet {
+  border-color: var(--line);
+  opacity: 0.75;
+}
+
+.travel-submit {
+  padding: 12px 14px;
+  border: 1px solid #4f46e5;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.travel-submit:hover,
+.travel-submit:focus-visible {
+  background: linear-gradient(90deg, #4f46e5, #7c3aed);
+  outline: none;
+}
+
+.travel-submit:disabled {
+  opacity: .6;
+  cursor: default;
+}
+
+/* 计划概览：生成中显示进度条，完成后换成计划文本 */
+.plan-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  padding: 40px 12px;
+  border-radius: 10px;
+  background: var(--term-card);
+}
+
+/* 进度条是"假"的：后端不回流式进度，所以只做一条走到 90% 的动画，
+   明确告知"在生成"，不谎报真实百分比。 */
+.plan-bar {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--term-disabled-bg);
+  overflow: hidden;
+}
+
+.plan-bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  width: 90%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  animation: plan-bar-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes plan-bar-pulse {
+  0%, 100% { opacity: .55; }
+  50%      { opacity: 1; }
+}
+
+.plan-progress-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--term-muted-2);
+}
+
+/* 计划文本：等宽字体、保留换行；不套虚线框（用户明确不要） */
+.plan-output {
+  margin: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--term-line-soft);
+  border-radius: 12px;
+  background: var(--term-card);
+  color: var(--term-heading);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.85;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.plan-output:empty { display: none; }
+
+/* ------------------------------------------ 计划概览版式（第 28 步，参考图 1） */
+
+/* 计划概览：标题卡 + 每日行程（第 45 步去掉了最左侧的「景点地图」占位卡片） */
+.overview {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.ov-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ov-hero,
+.ov-days {
+  padding: 16px 18px;
+  border: 1px solid var(--term-line-soft);
+  border-radius: 12px;
+  background: var(--term-card);
+}
+
+/* ---------------------------------------------- 行程地图（第 224 步）
+   卡片形状跟 .ov-hero / .ov-days 保持一致；地图本体要显式高度，
+   否则 AMap 拿到的容器是 0px 高、地图渲染出来是一条线。 */
+.ov-map {
+  padding: 16px 18px;
+  border: 1px solid var(--term-line-soft);
+  border-radius: 12px;
+  background: var(--term-card);
+}
+
+.ov-map-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.ov-map-head .ov-section-title {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  flex: 1;
+}
+
+.ov-map-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ov-map-day {
+  padding: 4px 10px;
+  border: 1px solid var(--term-line-soft);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--term-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ov-map-day[aria-selected='true'] {
+  border-color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.18);
+  color: #e9e2ff;
+}
+
+.ov-map-toggle {
+  padding: 6px 12px;
+  border: 1px solid var(--term-line-soft);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* 地图的位置与尺寸（第 228 步，用户 m07438 定的）：**正方形、靠右、左边留白**。
+   为什么用 `margin-left: auto` 而不是给左边定一个宽度：窗口变窄时要能自己收，
+   写死左边距就等于写死"窗口不能比这更窄"，窄屏直接横向溢出。
+   `min(100%, 380px)`：宽窗口时方块不会长到压住右侧内容，窄窗口时撑满。 */
+.ov-map-body {
+  width: min(100%, 380px);
+  margin: 12px 0 0 auto;
+}
+
+.ov-map-canvas {
+  margin-top: 0;
+  width: 100%;
+  /* 正方形：宽定了高就跟上，不用两处各写一个数 */
+  aspect-ratio: 1 / 1;
+  min-height: 260px;
+  border-radius: 10px;
+  overflow: hidden;
+  /* 主题色：瓦片要加载完才有内容，先用底色占位（暗色下不能发亮成一块亮斑） */
+  background: var(--term-bg);
+}
+
+.ov-map-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--term-dim);
+}
+
+/* 地图上的编号标记：底色由 map.js 按天写进 style，这里只留 fallback */
+.map-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 2px solid #fff;
+  border-radius: 50% 50% 50% 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+/* 标题条：像参考图那样用紫色横条压顶 */
+.ov-hero-title {
+  margin: -16px -18px 14px;
+  padding: 10px 18px;
+  border-radius: 11px 11px 0 0;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ov-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 760px) {
+  .overview { flex-direction: column; }
+  .ov-facts { grid-template-columns: 1fr; }
+}
+
+.ov-card {
+  padding: 12px 14px;
+  border: 1px solid var(--term-line-soft);
+  border-radius: 10px;
+  background: var(--term-input);
+}
+
+.ov-card-label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--term-muted-2);
+}
+
+.ov-card-value {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--term-fg);
+}
+
+.ov-section-title {
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--term-line-2);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--term-heading);
+}
+
+/* 每日行程：一行一天，点进去看详情 */
+.day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.day-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 15px;
+  border: 1px solid var(--term-line-soft);
+  border-radius: 10px;
+  background: var(--term-input);
+  color: var(--term-fg);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+
+.day-item:hover,
+.day-item:focus-visible {
+  border-color: var(--accent);
+  background: var(--term-hover);
+  outline: none;
+}
+
+.day-arrow {
+  color: var(--term-faint);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.day-name { font-weight: 600; }
+.day-date { margin-left: auto; color: var(--term-muted); }
+/* 逐日预报（第 234 步）：字小一号，写的是「预报」而不是观测 */
+.day-forecast { color: var(--term-muted); font-size: 12px; }
+
+/* ------------------------------------ 某一天的详情页（第 28 步，参考图 2） */
+
+.day-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.day-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--term-heading);
+}
+
+/* 通用小按钮（`.tbtn`）。原先是「编辑行程 / 导出行程」两个占位按钮在用，
+   第 46 步那两个按钮已删；这类样式留着给出行窗口以后的小按钮复用，所以不删。 */
+.tbtn {
+  padding: 7px 12px;
+  border: 1px solid var(--term-line);
+  border-radius: 8px;
+  background: var(--term-input);
+  color: var(--term-fg);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.tbtn:hover:not(:disabled),
+.tbtn:focus-visible:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: none;
+}
+
+.tbtn:disabled {
+  color: var(--term-faint);
+  background: var(--term-card);
+  cursor: default;
+}
+
+.day-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.day-base {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--term-line-soft);
+  border-radius: 10px;
+  background: var(--term-card);
+}
+
+.day-base-row {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.day-base-label {
+  flex: none;
+  width: 96px;
+  color: var(--term-muted-2);
+}
+
+.day-base-value { color: var(--term-fg); }
+
+.day-section-title {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--term-heading);
+}
+
+/* 景点卡片 */
+.spot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 760px) {
+  .spot-grid { grid-template-columns: 1fr; }
+}
+
+.spot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 0 12px;
+  border: 1px solid var(--term-line-soft);
+  border-radius: 10px;
+  background: var(--term-input);
+  overflow: hidden;
+}
+
+.spot-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.spot-index {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .25);
+  font-size: 12px;
+}
+
+.spot-name { min-width: 0; }
+.spot-cost { margin-left: auto; font-size: 12.5px; }
+
+.spot-meta,
+.hotel-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+
+.spot-meta dt,
+.hotel-meta dt { color: var(--term-muted); }
+.spot-meta dd,
+.hotel-meta dd { margin: 0; color: var(--term-fg); }
+
+.spot-desc {
+  margin: 0;
+  padding: 0 12px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--term-muted-2);
+}
+
+/* 景点配图（第 29 步）：图 + 署名。署名是 Unsplash 条款要求的，不能省。 */
+.spot-photo,
+.spot-photo-placeholder {
+  margin: 0;
+  padding: 0 12px;
+}
+
+.spot-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--term-bg);
+}
+
+.spot-credit {
+  margin: 5px 0 0;
+  font-size: 11px;
+  color: var(--term-muted);
+}
+
+.spot-credit a {
+  color: var(--term-muted-2);
+  text-decoration: underline;
+}
+
+.spot-credit a:hover { color: var(--accent); }
+
+/* 没搜到图时的占位：明确写出来，别留一片空白让人以为界面坏了 */
+.spot-photo-placeholder {
+  margin: 0;
+  padding: 18px 12px;
+  border: 1px dashed var(--term-line);
+  border-radius: 8px;
+  background: var(--term-placeholder);
+  color: var(--term-faint);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* 住宿推荐 */
+.hotel-card {
+  padding: 0 0 12px;
+  border: 1px solid var(--term-line-soft);
+  border-radius: 10px;
+  background: var(--term-input);
+  overflow: hidden;
+}
+
+.hotel-name {
+  margin-bottom: 8px;
+  padding: 9px 12px;
+  background: linear-gradient(90deg, #2563eb, #38bdf8);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* 餐饮安排：两列表格 */
+.meal-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--term-line-soft);
+  border-radius: 10px;
+  background: var(--term-input);
+  font-size: 12.5px;
+  overflow: hidden;
+}
+
+.meal-table th,
+.meal-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e9ecef;
+  text-align: left;
+  vertical-align: top;
+}
+
+.meal-table th {
+  width: 72px;
+  color: var(--term-muted-2);
+  font-weight: 600;
+}
+
+.meal-table tr:last-child th,
+.meal-table tr:last-child td { border-bottom: 0; }
+
+.modal-title {
+  margin: 0 0 18px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+/* ------------------------------------------------------------ 邮箱窗口 */
+
+/* 尺寸严格按用户要求：min(1100px, 92vw) × min(820px, 90vh)。
+   这里用 height 而不是 min-height —— 用户给的是一组确定的两维尺寸，
+   窗口不该被内容撑高；装不下时由内部区域自己滚（.mail-list / 登入页）。
+   内边距归零、子项拉伸：内部是"左侧栏 + 主区"的两栏版式，要贴边。 */
+.modal-box--mail {
+  width: min(1100px, 92vw);
+  height: min(820px, 90vh);
+  max-height: 94vh;
+  padding: 0;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+/* 两页共用：登入前后都在同一个窗口里切，不新开窗口。
+   min-height:0 是必须的：flex 子项默认 min-height:auto，
+   会把内容顶出固定高度的窗口，滚动条就不出现了。 */
+.mail-page {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+/* 左上角原先是 logo，按要求去掉，只留一块等高空白——版式才不会整体上跳。 */
+.mail-logo-slot {
+  flex: none;
+  height: 34px;
+}
+
+/* ---- 第 1 页：添加邮箱（参考图 2：元素居中，其余留白） ---- */
+
+.mail-page--login {
+  position: relative;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 30px 24px;
+  overflow-y: auto;
+  background: var(--surface-soft);     /* 图 2 的浅灰底，输入框才是白的 */
+}
+
+.mail-page--login .mail-logo-slot {
+  position: absolute;
+  top: 24px;
+  left: 26px;
+  width: 120px;
+}
+
+.mail-intro { text-align: center; }
+
+.mail-title {
+  margin: 0 0 12px;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: var(--fg);
+}
+
+.mail-subtitle {
+  margin: 0;
+  font-size: 17px;
+  color: var(--fg-soft);
+}
+
+.mail-form {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 刻意不写可见标签：图 2 的白底圆角框里只有灰字占位。
+   无障碍靠输入框自己的 aria-label（见 index.html）。 */
+.mail-input {
+  width: 100%;
+  padding: 18px 22px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: 17px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .07);
+}
+
+.mail-input::placeholder { color: var(--fg-soft); }
+
+.mail-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.mail-submit {
+  margin-top: 8px;
+  padding: 18px 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter .15s ease;
+}
+
+.mail-submit:hover:not(:disabled) { filter: brightness(1.08); }
+.mail-submit:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* 正在连邮箱时按钮要看得出来"在处理"，否则用户会重复点 */
+.mail-submit:disabled { opacity: .55; cursor: default; }
+
+.mail-hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--fg-soft);
+}
+
+.mail-error {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--danger);
+}
+
+.mail-service-link {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mail-service-link:hover { background: var(--accent-soft); }
+.mail-service-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.mail-services {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.mail-service {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mail-service:hover { border-color: var(--accent); }
+.mail-service:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mail-service.is-active { border-color: var(--accent); background: var(--accent-soft); }
+.mail-service-host { margin-left: auto; font-size: 12px; color: var(--fg-soft); }
+
+.mail-service-help {
+  margin: 0;
+  padding: 0 3px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--fg-soft);
+}
+
+/* ---- 第 2 页：收件箱（参考图 1，去掉 logo 与搜索框下方的工具栏） ---- */
+
+.mail-page--inbox { flex-direction: row; }
+
+.mail-rail {
+  flex: none;
+  width: 208px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 12px 12px;
+  border-right: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.mail-rail .mail-logo-slot { margin: 0 8px 10px; }
+
+.mail-folders { display: flex; flex-direction: column; gap: 2px; }
+
+.mail-folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mail-folder:hover { background: rgba(127, 127, 127, .12); }
+.mail-folder:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mail-folder.is-active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+.mail-folder-count { margin-left: auto; font-size: 12.5px; color: var(--fg-soft); }
+.mail-folder.is-active .mail-folder-count { color: var(--accent); }
+
+/* 账号行贴在栏底：原文要求两个状态都在这一窗口内，没有退出就回不去登入页 */
+.mail-account {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 6px 0;
+  border-top: 1px solid var(--line);
+}
+
+.mail-account-address {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  color: var(--fg-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mail-logout {
+  flex: none;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mail-logout:hover { border-color: var(--accent); color: var(--accent); }
+.mail-logout:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.mail-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 右侧留出关闭按钮的位置（.modal-close 绝对定位在左上角之外的右上角） */
+.mail-searchbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 15px 58px 15px 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mail-search-icon { font-size: 14px; color: var(--fg-soft); }
+
+.mail-search {
+  flex: 1 1 auto;
+  max-width: 460px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+}
+
+.mail-search::placeholder { color: var(--fg-soft); }
+.mail-search:focus { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+
+.mail-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0 14px;
+}
+
+/* 分组标题：今天 / 昨天 / 星期X / 上周（图 1 的 "今天 (1封)" 那种） */
+.mail-group {
+  padding: 12px 22px 4px;
+  font-size: 12.5px;
+  color: var(--fg-soft);
+}
+
+.mail-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 22px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.mail-item:hover { background: var(--surface-soft); }
+
+/* 发件人头像：没有真头像就用名字首字 + 一个按地址定色的底色，
+   比摆一排一样的图标更容易扫读，也不用引外部图片。 */
+.mail-avatar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.mail-from {
+  flex: none;
+  width: 150px;
+  font-size: 13.5px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mail-subject {
+  flex: 0 1 auto;
+  max-width: 40%;
+  font-size: 13.5px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mail-snippet {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--fg-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mail-time {
+  flex: none;
+  width: 46px;
+  text-align: right;
+  font-size: 13px;
+  color: var(--fg-soft);
+}
+
+/* 未读：两侧加粗 + 主题加深。不用刺眼的红点，保持"简约"。 */
+.mail-item.is-unread .mail-from,
+.mail-item.is-unread .mail-subject { font-weight: 700; }
+
+/* 从桌宠气泡点进来时，短暂标一下"就是这一封"（第 198 步）。
+   用两轮呼吸而不是常亮：常亮会让人以为它是"选中"，而列表本来没有选中态。 */
+.mail-item.is-flash {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  animation: mail-flash 1.2s ease-in-out 2;
+}
+
+@keyframes mail-flash {
+  0%, 100% { background: transparent; }
+  50%      { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mail-item.is-flash { animation: none; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+}
+
+.mail-star {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--line);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mail-star:hover { background: var(--surface-soft); color: var(--fg-soft); }
+.mail-star:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mail-star.is-on { color: #e8a33d; }
+
+/* 收取中 / 空文件夹 / 出错的提示。默认隐藏，由 app.js 填文字并显示。
+   is-centered：整块区域没有内容时（正在收取 / 空 / 失败）居中显示一句话；
+   没有这个类时是顶上一条细横幅——列表还在，只是顺带说一句（比如星标没保存成功）。 */
+.mail-state {
+  flex: none;
+  display: block;
+  margin: 0;
+  padding: 10px 22px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fg-soft);
+}
+
+.mail-state.is-centered {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-size: 13.5px;
+  text-align: center;
+}
+
+/* 列表末尾那句：正在加载更多 / 继续滚动 / 已经到底。
+   没有它的话，滚到底不动会让人分不清"到底了"还是"卡住了"。 */
+.mail-more {
+  margin: 0;
+  padding: 16px 22px 22px;
+  font-size: 12.5px;
+  color: var(--fg-soft);
+  text-align: center;
+}
+
+@media (max-width: 820px) {
+  .mail-rail { width: 168px; }
+  .mail-snippet { display: none; }
+  .mail-subject { max-width: 60%; }
+}
+
+@media (max-width: 560px) {
+  .mail-title { font-size: 30px; }
+  .mail-rail { width: 130px; }
+  .mail-from { width: 96px; }
+}
+
+/* ------------------------------------------------------------ 食谱窗口（第 37 步） */
+
+/* 尺寸按用户要求：min(1100px, 92vw) × min(820px, 90vh)，与邮箱窗口同规格。
+
+   第 48 步改版后内部结构换了：不再是"左栏 + 中间页 + 右栏"三栏，
+   而是**两个互斥的整屏 section**（首页 / 对话页），所以这里回到纵向排列。
+   `position: relative` 是必须的：菜谱详情浮层用 `absolute inset:0` 盖住
+   整个窗口内部（而不是再造一个全屏 modal）。display 仍然不碰
+   （[hidden] 靠 !important 生效）。 */
+.modal-box--recipe {
+  position: relative;
+  width: min(1100px, 92vw);
+  height: min(820px, 90vh);
+  max-height: 94vh;
+  padding: 0;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+/* ================= 第 48 步改版：首页（推荐卡片） + 对话页 =================
+   版式变了（原来是"左栏导航 + 中间两页 + 右栏"），但窗口尺寸不变：
+   min(1100px, 92vw) × min(820px, 90vh)。两个 section 互斥显示：
+   首页（.recipe-home）与对话页（.recipe-chat），由 app.js 切 hidden。
+   切页动画：首页整块向上滑走（translateY），对话页从下方升起——
+   用户要的就是"点对话，菜品栏向上滑消失"。 */
+
+.recipe-home {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 18px 16px;
+  gap: 14px;
+  /* 切页时用这个过渡（滑走/滑回），reduced-motion 下由全局规则压成瞬时 */
+  transition: transform .22s ease, opacity .22s ease;
+}
+
+/* 滑走的中间态：整块上移 + 淡出。用 class 而不是内联样式，
+   方便"返回"时原路滑回。 */
+.recipe-home.is-leaving {
+  transform: translateY(-18px);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.recipe-title {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg-soft);
+  letter-spacing: .04em;
+}
+
+/* 卡片横栏：横向滚动，一屏约 6 张（卡片宽 148px + 间距）。
+   刻意**不做**左右箭头（用户明确去掉）：滑动的入口是触控板/滚轮，
+   翻页靠「换一批」。 */
+.recipe-cards {
+  flex: none;
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 10px;
+  scroll-snap-type: x proximity;
+  /* 滚动条在深色主题下也别太抢眼 */
+  scrollbar-width: thin;
+}
+
+.recipe-cards:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+.recipe-card-item {
+  flex: none;
+  width: 148px;
+  /* 高度交给行内最高的那张决定（图片块固定 88px + 文字区），
+     `align-items: stretch` 保证同一行卡片一样高——没图的卡片也不会矮一截 */
+  height: auto;
+  /* 88（缩略图）+ 10 + 两行菜名(≈41) + 4 + 一行脚注(≈16) + 12 ≈ 171 */
+  min-height: 171px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  scroll-snap-align: start;
+}
+
+/* 缩略图：裁成统一比例（cover）卡片才整齐；完整显示留给详情页。
+   固定高度 + object-fit，避免竖图把卡片撑成一列高低不齐。 */
+.recipe-card-thumb {
+  display: block;
+  width: 100%;
+  height: 88px;
+  flex: none;
+  object-fit: cover;
+  background: var(--surface-soft);
+}
+
+/* 没有图（用户自建菜 / 加载失败）：缩略图已被移除，文字区居中撑满 */
+.recipe-card-item--no-photo .recipe-card-text {
+  flex: 1;
+  justify-content: center;
+}
+
+.recipe-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px 12px;
+  flex: 1;
+}
+
+.recipe-cards { align-items: stretch; }
+
+.recipe-card-item:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-panel);
+}
+
+.recipe-card-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.recipe-card-name {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  /* 菜名可能很长（"蒜蓉粉丝蒸娃娃菜"），最多两行，超出省略。
+     第 59 步从三行改成两行：卡片顶部多了 88px 缩略图，
+     留三行会把"时长 · 标签"那一行挤出卡片。 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.recipe-card-foot {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fg-soft);
+}
+
+/* 空库：给一个明确动作，而不是一片空白 */
+.recipe-cards-empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.recipe-cards-empty-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-soft);
+}
+
+.recipe-seed {
+  padding: 9px 18px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.recipe-seed:hover { background: var(--accent-soft); }
+.recipe-seed:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.recipe-refresh {
+  align-self: flex-start;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.recipe-refresh:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.recipe-refresh:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.recipe-refresh:disabled { opacity: .5; cursor: default; }
+
+/* 对话入口：贴在首页底部。点它 → 卡片栏向上滑走、对话页升起 */
+.recipe-chat-entry {
+  flex: none;
+  width: 100%;
+  margin-top: auto;
+  padding: 13px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--fg-soft);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.recipe-chat-entry:hover { border-color: var(--accent); color: var(--fg); }
+.recipe-chat-entry:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- 对话页 ---- */
+
+.recipe-chat {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  animation: recipe-rise .22s ease;
+}
+
+@keyframes recipe-rise {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.recipe-chat-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* 右边留 46px：窗口的关闭 × 是绝对定位在右上角的（.modal-close），
+     不留空档的话「新建」会正好压在它下面（第 137 步用户截图报的问题）。 */
+  padding: 14px 46px 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.recipe-back {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.recipe-back:hover { border-color: var(--accent); color: var(--accent); }
+.recipe-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.recipe-chat-title { margin: 0; font-size: 14.5px; font-weight: 600; }
+
+.recipe-chat-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+.recipe-chat-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 旧多天流程的折叠区：贴在对话页底部 */
+.recipe-legacy {
+  flex: none;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.recipe-legacy > summary {
+  padding: 10px 18px;
+  color: var(--fg-soft);
+  cursor: pointer;
+}
+
+.recipe-legacy[open] { max-height: 46%; overflow-y: auto; }
+
+/* ---- 菜谱详情浮层（盖在窗口内部，不是又一个全屏 modal） ---- */
+
+.recipe-detail {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 22px 20px;
+  background: var(--surface);
+  /* 详情要能盖住整个窗口内容（含右栏），所以用 absolute + inset */
+  overflow-y: auto;
+}
+
+.recipe-detail-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.recipe-detail-title { margin: 0; font-size: 18px; font-weight: 700; line-height: 1.35; }
+
+.recipe-detail-close {
+  flex: none;
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-soft);
+  color: var(--fg-soft);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.recipe-detail-close:hover { color: var(--fg); }
+.recipe-detail-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.recipe-detail-meta { margin: 6px 0 16px; font-size: 12.5px; color: var(--fg-soft); }
+
+.recipe-detail-body { display: flex; flex-direction: column; gap: 16px; }
+
+.recipe-detail-section-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fg-soft);
+}
+
+.recipe-detail-list { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.75; }
+
+/* 详情页实拍图（第 58/59 步）：来自独立的只读图片库，按菜名关联。
+   用户要求"放小点、完整显示" → 不裁切（contain），高度封顶、水平居中；
+   竖图会变窄，但整张图都能看到。没图时前端整块移除 figure，无需占位。 */
+.recipe-detail-photo {
+  margin: 0 0 14px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-soft);
+  /* 竖图居中；figcaption 要在图下方，所以是 column 而不是默认的 row */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.recipe-detail-photo img {
+  display: block;
+  max-width: 100%;
+  /* 竖图（长边 1400+）限高 240，横图按宽度自动缩放 */
+  max-height: 240px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.recipe-detail-photo-note {
+  margin: 6px 2px 0;
+  font-size: 11.5px;
+  color: var(--fg-soft);
+  text-align: center;
+}
+
+.recipe-detail-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-soft);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--fg-soft);
+}
+
+/* ---- 对话页内部：消息流 / 输入框（沿用第 37 步的观感） ---- */
+
+.recipe-log {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 22px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recipe-msg {
+  max-width: 78%;
+  padding: 11px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 助手在左（浅底），用户在右（强调色）——和参考图一致，但配色沿用本站主题 */
+.recipe-msg--bot { align-self: flex-start; background: var(--surface-soft); color: var(--fg); }
+.recipe-msg--user { align-self: flex-end; background: var(--accent-soft); color: var(--accent); }
+
+/* "我记下了：目标、忌口"这种回执，做小一号的提示条 */
+.recipe-msg--note {
+  align-self: flex-start;
+  background: transparent;
+  padding: 0 4px;
+  font-size: 12.5px;
+  color: var(--fg-soft);
+}
+
+/* ---- 对话里这一轮检索到的菜（第 50 步 50d）----
+   内容来自后端按 id 取的库数据（不是模型说的话）；点一下打开详情浮层。 */
+.recipe-answer-cards {
+  align-self: stretch;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 2px 0 4px;
+}
+
+.recipe-answer-card {
+  flex: 0 0 auto;
+  min-width: 132px;
+  max-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.recipe-answer-card:hover { border-color: var(--accent); }
+.recipe-answer-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.recipe-answer-name { font-size: 13.5px; font-weight: 600; line-height: 1.4; }
+.recipe-answer-foot { font-size: 11.5px; color: var(--fg-soft); }
+
+/* 第 50 步：`.recipe-missing`（"还差：…"那行）已随门禁一起去掉，
+   留个注记免得以后有人照着老代码找它。 */
+
+.recipe-composer {
+  display: flex;
+  gap: 8px;
+  padding: 10px 22px 18px;
+}
+
+.recipe-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+}
+
+.recipe-input::placeholder { color: var(--fg-soft); }
+.recipe-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+
+.recipe-send {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.recipe-send:hover:not(:disabled) { filter: brightness(1.08); }
+.recipe-send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.recipe-send:disabled { opacity: .5; cursor: default; }
+
+/* ---- 上传图片识菜（第 60 步）---- */
+
+.recipe-photo-btn {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.recipe-photo-btn:hover:not(:disabled) { border-color: var(--accent); }
+.recipe-photo-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.recipe-photo-btn:disabled { opacity: .5; cursor: default; }
+
+/* 待发送的图片：输入框上方一条，点 × 可以去掉 */
+.recipe-photo-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 22px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.recipe-photo-thumb {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--surface-soft);
+}
+
+.recipe-photo-name {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--fg-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recipe-photo-remove {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-soft);
+  color: var(--fg);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* 拖拽悬停：整页给一个虚线提示框（pointer-events:none 才不会挡住 drop） */
+.recipe-chat-page { position: relative; }
+
+.recipe-chat-page.is-dragover::after {
+  content: "松手就把这张图发给菜谱助手";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, .35);
+  color: #fff;
+  font-size: 15px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.recipe-bubble-attach {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+  opacity: .75;
+}
+
+.recipe-error {
+  margin: 0;
+  padding: 0 22px 14px;
+  font-size: 13px;
+  color: #c0392b;
+}
+
+/* ---- 第 2 页：饮食计划 ---- */
+
+.recipe-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.recipe-days { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--fg-soft); }
+
+.recipe-days-input {
+  width: 62px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+}
+
+.recipe-days-input:focus { outline: none; border-color: var(--accent); }
+
+.recipe-generate {
+  margin-left: auto;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.recipe-generate:hover:not(:disabled) { filter: brightness(1.08); }
+.recipe-generate:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.recipe-generate:disabled { opacity: .55; cursor: default; }
+
+/* 生成中的进度条：与出行那一步同款（走到 90% 停住，**是假的**，
+   真实进度拿不到——只用来告诉用户"在动"，别让他以为卡死了）。 */
+.recipe-progress { flex: none; padding: 16px 22px 4px; }
+
+.recipe-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+
+.recipe-bar > i {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: recipe-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes recipe-slide {
+  0% { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}
+
+.recipe-progress-text {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--fg-soft);
+}
+
+.recipe-warnings {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 22px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  font-size: 12.5px;
+  color: var(--fg);
+  line-height: 1.6;
+}
+
+.recipe-plan {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.recipe-day {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.recipe-day-title {
+  margin: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.recipe-meals { display: flex; flex-direction: column; }
+
+.recipe-meal {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+}
+
+.recipe-meal:first-child { border-top: 0; }
+
+.recipe-slot { font-size: 13px; font-weight: 600; color: var(--fg-soft); }
+
+.recipe-dishes { display: flex; flex-direction: column; gap: 12px; }
+
+.recipe-dish-name { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+
+.recipe-dish-why { margin: 0 0 6px; font-size: 12.5px; color: var(--fg-soft); }
+
+.recipe-dish-label {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-soft);
+}
+
+.recipe-dish-list {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+/* 来源链接：Tavily 搜到的网页。标明出处是必须的（和 Unsplash 署名同理），
+   顺便让用户能自己核对菜谱。 */
+.recipe-dish-sources { margin: 0; font-size: 12px; color: var(--fg-soft); }
+.recipe-dish-sources a { color: var(--accent); text-decoration: none; }
+.recipe-dish-sources a:hover { text-decoration: underline; }
+
+.recipe-extra { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+
+/* 疑似命中忌口：用边框强调，但不用刺眼的红底——它是"请自己确认"，
+   不是"这份菜单不能吃"（关键词匹配会有误报，见 core/recipes.py 的说明）。 */
+.recipe-extra--alert { border-color: #e8a33d; background: rgba(232, 163, 61, .08); }
+.recipe-extra-title { margin: 0 0 8px; font-size: 13.5px; font-weight: 700; }
+.recipe-extra-list { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.7; }
+.recipe-extra-list li { margin-bottom: 2px; }
+
+.recipe-empty {
+  margin: auto;
+  padding: 40px 22px;
+  font-size: 13.5px;
+  color: var(--fg-soft);
+  text-align: center;
+  white-space: pre-line;
+}
+
+/* ---- 右栏：需求画像 + 快捷问题 + 免责声明 ---- */
+
+.recipe-aside {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 296px;
+  padding: 18px 16px;
+  border-left: 1px solid var(--line);
+  background: var(--surface-soft);
+  overflow-y: auto;
+}
+
+.recipe-card {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.recipe-card-title { margin: 0 0 10px; font-size: 14px; font-weight: 700; }
+
+/* ---- 右栏的标签框（第 50 步：一个框、两组标签按钮） ----
+   用户要求：每个选项是一个小按钮，点一下**加深颜色**表示选上了；
+   每组只留几个大众选项，不做标签墙。
+
+   两组的分工（也是用户定的）：
+     .recipe-tag-group-title 上面那组是"一直记住 · 不吃"，存库；
+     下面那组"这次想要"只影响这一次。两组视觉上要能分辨，
+     否则用户点了「清淡」会以为被记住了。 */
+.recipe-tag-group { margin-bottom: 16px; }
+.recipe-tag-group:last-child { margin-bottom: 0; }
+
+.recipe-tag-group-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-soft);
+}
+
+/* 「这次想要」按维度分行：口味 / 怎么吃 / 工具 / 时间 */
+.recipe-want-groups { display: flex; flex-direction: column; gap: 10px; }
+
+.recipe-want-group { display: flex; align-items: flex-start; gap: 8px; }
+
+.recipe-want-label {
+  flex: none;
+  width: 44px;
+  padding-top: 4px;
+  font-size: 11.5px;
+  color: var(--fg-soft);
+}
+
+.recipe-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* 小按钮本体。未选中：浅色描边；选中（.is-on）：加深底色 + 强调色文字。
+   用 aria-pressed 表达状态，读屏也能读出来。 */
+.recipe-tag {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg-soft);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.recipe-tag:hover { border-color: var(--accent); color: var(--accent); }
+.recipe-tag:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.recipe-tag.is-on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  /* 窄屏：对话页的右栏（需求画像）收成横条，正文与输入框仍然可用。
+     首页的卡片横栏本来就横向滚动，不需要额外处理。 */
+  .recipe-chat-body { flex-direction: column; }
+  .recipe-aside {
+    width: auto;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    max-height: 40%;
+  }
+}
+
+/* ------------------------------------------------------------ 签到窗口 */
+
+/* 尺寸按用户要求"窗口做得稍微大一些"：
+   宽度 620px（比登入/关于的 300~320px 宽一倍），高度 700px、留 88vh 兜底。
+   为什么高度不像登入那样"由内容撑"：日历有 5~6 行日期格，
+   月份不同高度会跳，定高后翻月时窗口不抖；矮屏靠 .cal-body 内部滚动。
+   第 146 步起格子里多了"节日 / 农历"两行（四行文案），--cal-cell 提到 78px、
+   窗口高度也放到 700px，否则 6 行月份会被挤得没有呼吸空间。 */
+.modal-box--checkin {
+  --cal-cell: 78px;                 /* 日期格高度：数字 + 节日 + 农历 + 已签/未签 */
+  width: min(620px, 100%);
+  height: min(700px, 90vh);
+  max-height: 94vh;
+  /* 上下内边距比其它窗口收一点（默认是 26/20）：日历有 6 行，省下来给格子。 */
+  padding: 18px 22px 14px;
+  overflow: hidden;                 /* 内容实在放不下时由 .cal-body 自己滚 */
+}
+
+/* ---- 月份栏：‹ 2026 年 3 月 › ---- */
+
+.cal-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  /* 与日历之间留出间距：原本靠"本月小结"那行撑开，
+     用户第 3 条去掉统计行后在这里补上，免得月份标题贴着星期栏。 */
+  margin-bottom: 14px;
+}
+
+.cal-month {
+  margin: 0;
+  min-width: 150px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--fg);
+  text-align: center;
+}
+
+.cal-nav {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cal-nav:hover { border-color: var(--accent); color: var(--accent); }
+.cal-nav:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 不能翻的方向压暗、且明确不可点——灰色 + 禁用比"点了没反应"清楚 */
+.cal-nav:disabled {
+  color: var(--fg-soft);
+  opacity: .45;
+  cursor: default;
+}
+
+.cal-nav:disabled:hover { border-color: var(--line); color: var(--fg-soft); }
+
+/* ---- 日历本体 ---- */
+
+/* 取数前/取数失败时这一块要能撑住高度，否则窗口会突然缩短再弹回 */
+.cal-body {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.cal-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 6px;              /* 格子之间的缝，靠这里的间距而不是 margin */
+  table-layout: fixed;
+}
+
+/* 月份栏与日历之间不用再补间距了（见上面的 .cal-bar margin-bottom）。 */
+
+.cal-week {
+  width: 14.28%;                    /* 7 列均分（固定版式下防单列被撑宽） */
+  padding: 0 0 4px;
+  color: var(--fg-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.cal-slot { vertical-align: top; padding: 0; }
+
+/* 空白格（当月 1 号之前的占位）：只占位，不画任何东西 */
+.cal-blank { height: var(--cal-cell, 78px); }
+
+/* 一天的格子。做成 <button>：今天与过去都能点（过去的是补签），
+   还没到的那个加 disabled —— 浏览器自己就不会派发 click，
+   不用在 JS 里再判一次"这个能不能点"。
+
+   min-height 而不是 height：今天那格要比别人多一行「今天」标签
+   （"已签/未签"那行仍然有），定死高度的话三行会挤在一起。 */
+.cal-day {
+  position: relative;              /* 休/班 小标要绝对定位在右上角 */
+  width: 100%;
+  min-height: var(--cal-cell, 78px);
+  padding: 6px 3px 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cal-day:hover { border-color: var(--accent); background: var(--accent-soft); }
+.cal-day:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* 日期数字：格子里最大的字 */
+.cal-num { font-size: 16px; font-weight: 600; line-height: 1.15; }
+
+/* 节日名：比日期小、比农历略重（用户第 1 条） */
+.cal-fest {
+  max-width: 100%;
+  font-size: 10.5px;
+  line-height: 1.15;
+  font-weight: 600;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 农历：与节日同字号但更淡，读起来有"号数 → 节日 → 农历"的层次 */
+.cal-lunar {
+  max-width: 100%;
+  font-size: 10.5px;
+  line-height: 1.15;
+  color: var(--fg-soft);
+  white-space: nowrap;
+}
+
+/* 已签 / 未签：**最小的一行**，放在农历/节日下面（用户第 2 条） */
+.cal-note {
+  font-size: 9.5px;
+  line-height: 1.1;
+  color: var(--fg-soft);
+  letter-spacing: .02em;
+}
+
+/* 休 / 班：右上角小标（用户第 1 条）。
+   绝对定位，不占格子的行高——否则有标的格子会比其他格子高一块。 */
+.cal-badge {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: 9px;
+  line-height: 1.3;
+  padding: 0 2px;
+  border-radius: 4px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* 调休补班用另一种色，别和"放假"混在一起 */
+.cal-day.is-rest-work .cal-badge {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+/* 补签失败时，提示写在那一天的"未签"**下面**（用户第 2 条），
+   所以这一格会多出一行红字、比别的格子高一点——这是刻意的：
+   提示跟着出问题的那一天走，用户不用自己去猜是哪天没签上。 */
+.cal-day.has-card-note { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
+
+.cal-card-note {
+  max-width: 100%;
+  font-size: 9.5px;
+  line-height: 1.2;
+  color: var(--danger);
+  text-align: center;
+  overflow-wrap: anywhere;       /* "未持有补签卡"在窄格里也不许溢出格子 */
+}
+
+/* 颜色变量放在 .modal-box--checkin 作用域里：
+   color-mix 由主题变量现算，所以浅色/深色主题都不会跑出脏色
+   （硬编码 #e8f5ec 这类值在深色主题下会变成一块刺眼的亮斑）。 */
+.modal-box--checkin {
+  --cal-done: #2f9e63;
+  --cal-todo-soft: var(--surface-soft);
+  /* 过去日期的"灰蓝"（用户第 4 条）：比默认边框明显，又不抢今天的蓝色 */
+  --cal-past: #7d8fa9;
+  --cal-past-soft: color-mix(in srgb, var(--cal-past) 18%, var(--surface));
+}
+
+/* 已签：**不加颜色标记**（用户第 3 条）。
+   靠"已签 / 未签"两个字区分，不再用绿色底 + 绿字。 */
+.cal-day.is-done {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.cal-day.is-done:hover {
+  border-color: var(--cal-past);
+  background: var(--cal-past-soft);
+}
+
+/* 未签：可用但"空着"——淡灰底 */
+.cal-day.is-todo { background: var(--cal-todo-soft); }
+
+/* 过去的日子（今天以前）：鼠标指向 / 键盘聚焦 / 按下时用灰蓝色标出来，
+   与"今天"的蓝色、以及"还没到"的透明格区分开（用户第 4 条）。 */
+.cal-day.is-past:hover,
+.cal-day.is-past:focus-visible,
+.cal-day.is-past:active {
+  border-color: var(--cal-past);
+  background: var(--cal-past-soft);
+}
+
+/* 还没到：不可点，**不加框**（用户第 5 条）。只留数字与农历，
+   看起来就是"还不能签"，也不需要边框占位。 */
+.cal-day.is-future {
+  border-color: transparent;
+  background: transparent;
+  color: var(--fg-soft);
+  opacity: .55;
+  cursor: default;
+}
+
+.cal-day.is-future:hover { border-color: transparent; background: transparent; }
+.cal-day:disabled { cursor: default; }
+
+/* 今天：**蓝色特效**（用户第 2 条），并且**不写"今天"二字**（同一句要求）。 */
+.cal-day.is-today {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+.cal-day.is-today .cal-num { color: var(--accent); }
+
+/* 今天悬停时保持蓝色，别被灰蓝的"过去日期"样式盖掉 */
+.cal-day.is-today:hover,
+.cal-day.is-today:focus-visible {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+}
+
+/* 取数中的占位 / 取数失败的那句话（同一处文字，见 index.html 的注释）。
+   失败时用与其它窗口一致的红色（与 `.mail-error` 同源的 --danger 变量）。 */
+.cal-state {
+  margin: 0;
+  padding: 24px 8px;
+  color: var(--fg-soft);
+  font-size: 13px;
+  text-align: center;
+}
+
+.cal-state.is-error { color: var(--danger); }
+
+/* ---- 补签确认：窗口内部的小框（不用浏览器原生 confirm） ---- */
+
+/* 遮罩只盖住这个窗口，而不是整个视口——这是"就地弹一个小框"的观感，
+   也不会把整页压暗（用户明确不要那种满屏的原生弹框）。 */
+.cal-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 2;                    /* 高于日历，低于 × (它自带 z-index 1，这里要压过去) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, .28);
+  border-radius: 18px;           /* 跟着窗口的圆角走，别出直角 */
+}
+
+.cal-confirm-box {
+  width: min(320px, 100%);
+  padding: 18px 16px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+  text-align: center;
+}
+
+.cal-confirm-text {
+  margin: 0 0 14px;
+  color: var(--fg);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.cal-confirm-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.cal-confirm-btn {
+  min-width: 76px;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cal-confirm-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.cal-confirm-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 「确定」是主动作（要花掉一张卡），给它更明确的分量 */
+.cal-confirm-btn--primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.cal-confirm-btn--primary:hover {
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
+  filter: brightness(1.08);
+}
+
+/* 窄屏：格子缩小一档（不然 7 列 × 78px 在手机上会把表格挤到溢出），
+   窗口高度也放开一点，让日期格按内容排。 */
+@media (max-width: 560px) {
+  .modal-box--checkin {
+    --cal-cell: 64px;
+    height: min(620px, 92vh);
+  }
+
+  .cal-table { border-spacing: 4px; }
+  .cal-num { font-size: 14px; }
+  .cal-fest,
+  .cal-lunar { font-size: 9.5px; }
+  .cal-note,
+  .cal-card-note { font-size: 9px; }
+  .cal-badge { font-size: 8px; }
+}
+
+/* 补签确认的遮罩会盖住整个窗口，但**关窗的 × 要保持可点**——
+   否则"弹了小框就退不出去"，只能先选一个按钮。所以这里把 × 提到遮罩之上。 */
+.modal-box--checkin .modal-close { z-index: 3; }
+
+.modal-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg-soft);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-close:hover,
+.modal-close:focus-visible {
+  background: var(--surface-soft);
+  color: var(--fg);
+  outline: none;
+}
+
+/* ---------------------------------------------------------------- 桌宠 */
+
+/* 桌宠定位盒。
+   位置由 CSS 变量 --pet-x / --pet-y 表达（第 17 步支持拖拽），
+   未设置时回落到 50% —— 也就是屏幕正中，保持原来的默认行为。
+   盒子尺寸固定为按钮尺寸，这样轮盘与气泡相对它定位仍然正确。 */
+.pet {
+  position: fixed;
+  left: var(--pet-x, 50%);
+  top: var(--pet-y, 50%);
+  transform: translate(-50%, -50%);
+  width: var(--pet-w);
+  height: var(--pet-h);
+  z-index: 30;
+  pointer-events: none;       /* 只有按钮本身接收事件 */
+}
+
+/* 拖拽中：关掉浮动动画并给一点"被抓起来"的反馈 */
+.pet.is-dragging .pet-body {
+  cursor: grabbing;
+  transform: scale(1.06);
+}
+
+.pet-body {
+  position: absolute;
+  inset: 0;
+  z-index: 3;                 /* 始终在轮盘之上，方便再点一次收起 */
+  display: flex;              /* 用 flex 而非 grid：grid 的 center 会把图片缩回原始尺寸 */
+  align-items: center;
+  justify-content: center;
+  /* 尺寸由父层 .pet 决定（inset:0 撑满），这里不再重复声明，
+     避免同一个尺寸写两处、日后改一处漏一处。
+     图片与按钮同比例的取舍见上面注释。 */
+  padding: 0;
+  border: 0;
+  /* 第 142 步：**不要卡片**。原来这里有一层 `background: var(--surface)`
+     与 `box-shadow`，于是角色被装在一个深色圆角胶囊里（用户截图）。
+     现在图片是透明底，角色自己就是形状 —— 底色与外阴影都去掉，
+     只留一个不可见的命中框（focus 时仍有 outline 可辨）。 */
+  border-radius: var(--pet-radius);
+  background: transparent;
+  box-shadow: none;
+  font-size: 34px;
+  line-height: 1;
+  cursor: grab;               /* 提示可以抓住拖动（第 17 步） */
+  touch-action: none;         /* 触摸拖拽时不让浏览器当成滚动 */
+  pointer-events: auto;       /* 父层关掉了命中，这里单独打开 */
+  overflow: hidden;           /* 图片撑满按钮；留作"换更大比例的图"时的保护 */
+  transition: transform .18s ease, box-shadow .18s ease;
+  /* 第 154 步：**去掉上古的上下浮动**（`pet-float`，4 秒 ±6px）。
+     当年桌宠是一张静止图，靠它显得"活的"；现在有 8 秒的动作素材，
+     再叠一层浮动就是"自己在晃 + 视频在晃"，反而更抖。 */
+}
+
+/* 待机动画（第 151 步）：APNG，叠在静帧上面，只演 5.2 秒就收。
+   由 app.js 每 10 秒叫一次；播完 `.is-idle-playing` 被摘掉，静帧重新露出来。 */
+.pet-idle {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .16s ease;
+}
+
+.pet.is-idle-playing .pet-idle { opacity: 1; }
+
+.pet.is-idle-playing .pet-image { opacity: 0; }
+
+/* 桌宠图片：绝对定位撑满按钮。
+   按钮比例已与图片一致，所以 cover 不会裁掉任何内容；
+   cover 仍然保留，作为"图片被换成其它比例"时的兜底，避免变形。 */
+.pet-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 图片加载失败时的 emoji 回退，同样居中显示 */
+.pet-fallback {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.pet-body:hover,
+.pet-body:focus-visible {
+  transform: scale(1.08);
+  /* 不放 box-shadow：没有底色的框，阴影只会变成角色背后一团圆角黑雾 */
+}
+
+.pet-body:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* ------------------------------------------------------------ 动作菜单（第 150 步）
+
+   参考桌面右键菜单：一块面板、由上而下一行行排开、悬停高亮。
+   位置贴在桌宠右侧（`.pet` 是 fixed 定位的容器，所以这里用 absolute 即可跟手）。 */
+
+.action-menu {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.96);
+  min-width: 132px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity .12s ease, transform .12s ease;
+  z-index: 4;
+}
+
+.action-menu.is-open {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+.action-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.action-item:hover,
+.action-item:focus-visible {
+  background: var(--accent-soft);
+  color: var(--accent);
+  outline: none;
+}
+
+/* "思考中"气泡：贴在桌宠右侧。
+   偏移量按按钮半宽 + 一点间距算，按钮变宽后这里也要跟着走。 */
+.bubble {
+  position: absolute;
+  top: 50%;
+  left: calc(50% + var(--pet-w) / 2 + 16px);
+  transform: translateY(-50%);
+  display: flex;
+  gap: 5px;
+  padding: 12px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pet);
+  pointer-events: none;
+}
+
+.bubble i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fg-soft);
+  animation: dot 1.2s ease-in-out infinite;
+}
+
+.bubble i:nth-child(2) { animation-delay: .15s; }
+.bubble i:nth-child(3) { animation-delay: .3s; }
+
+/* 桌宠说话气泡（第 198 步 / 评价15 B6）：贴在头顶，一行字，可点。
+   为什么不用 .bubble：那个是"思考中"的三个点，固定贴右侧、`pointer-events: none`；
+   这个是**要能点的按钮**，位置和可交互性都不一样，混用会互相污染。 */
+.pet-note {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 240px;
+  padding: 8px 12px;
+  border: 1px solid var(--line, rgba(0, 0, 0, .08));
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pet);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  z-index: 5;
+}
+
+.pet-note:hover { border-color: var(--accent); }
+
+/* 小尾巴：指向下面的桌宠。用两条 45° 的边框拼一个方块，比 SVG 便宜。 */
+.pet-note::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-right: 1px solid var(--line, rgba(0, 0, 0, .08));
+  border-bottom: 1px solid var(--line, rgba(0, 0, 0, .08));
+  background: var(--surface);
+  transform: rotate(45deg);
+}
+
+.pet-note-text {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@keyframes dot {
+  0%, 60%, 100% { opacity: .3; transform: translateY(0); }
+  30%           { opacity: 1;  transform: translateY(-4px); }
+}
+
+/* ------------------------------------------------------------ 轮盘菜单 */
+
+/* 布局（第 39 步起）：桌宠本体居中，子功能做成环绕它的小圆。
+   用零尺寸盒子把坐标系原点落在**桌宠中心**，
+   这样小圆的位移是相对中心算的，前后左右才对称。 */
+.wheel {
+  position: absolute;
+  top: 50%;
+  /* 第 258 步：整体水平平移，对齐 karo 的**可视**中心（见 :root 的 --wheel-shift-x） */
+  left: calc(50% + var(--wheel-shift-x));
+  width: 0;
+  height: 0;
+  /* 第 260 步：必须**高于 .pet-body（z-index 3）**。
+     左移 23px 后，「对话」小圆（弧线 40°）正好落进桌宠 150×150 的盒子里，
+     而 .pet-body 是盖在轮盘上的点击层（原意是"再点一次收起"）——
+     它会把点击吃掉，表现就是「对话按钮点了没反应」，其它按钮在盒子外所以正常。 */
+  z-index: 4;
+  pointer-events: none;       /* 只有小圆本身可点 */
+}
+
+/* 4 个小圆均布在一个圆上：--tx / --ty 由 app.js 按角度算出
+   （CSS 无法对任意数量做三角函数运算，见 renderWheel）。
+   用零尺寸盒子 + translate(-50%,-50%) 让 (tx,ty) 正好是小圆中心的位置。 */
+.wheel-list {
+  position: relative;
+  display: block;
+}
+
+/* 小圆：圆形外框，里面只放图标 */
+.wheel-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: var(--wheel-btn);
+  height: var(--wheel-btn);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;          /* 圆形外框 */
+  background: var(--surface);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, .14);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  transform: translate(-50%, -50%) scale(.9);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .2s cubic-bezier(.2, .9, .3, 1.2),
+              opacity .16s ease,
+              border-color .15s ease,
+              background .15s ease;
+  transition-delay: var(--delay, 0ms);
+}
+
+.wheel.is-open .wheel-item {
+  transform: translate(calc(-50% + var(--tx, 0px)), calc(-50% + var(--ty, 0px))) scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.wheel-item:hover,
+.wheel-item:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.wheel-item:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+
+.wheel-icon { font-size: 20px; line-height: 1; }
+
+/* 文字：默认不显示。
+   用**绝对定位**是刻意的——否则浮出的文字会撑大按钮、把相邻的小圆推开。 */
+.wheel-label {
+  position: absolute;
+  left: calc(100% + 8px);      /* 贴在圆的右侧外面 */
+  top: 50%;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .16);
+  color: var(--fg);
+  font-size: 12.5px;
+  line-height: 1.4;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-50%);
+  transition: opacity .14s ease;
+  pointer-events: none;        /* 别让文字挡住旁边的小圆 */
+}
+
+/* 鼠标停在该图标上（键盘聚焦时同样）才弹出文字 */
+.wheel-item:hover .wheel-label,
+.wheel-item:focus-visible .wheel-label {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* 占位项（签到 / 状态 / 任务）：本轮只有选项、没有内容。
+   做成明确"不可点"的样子：灰一档、非手形光标、悬停不高亮。
+   但**仍然显示文字**——文案本身是有效信息，用来表示不可点的是灰色，不是藏文字。
+   （第 38 步曾把 title 改成"还没做"，第 39 步按用户要求改为始终显示功能名。） */
+.wheel-item:disabled {
+  color: var(--fg-soft);
+  cursor: default;
+}
+
+/* 第 261 步：半透明**只在打开态**生效。
+   以前这里无条件写 `opacity: .55`，而收起态的 `.wheel-item` 是 `opacity: 0`——
+   `:disabled` 的特异性更高，于是「任务」占位项在**轮盘没打开时**也一直可见，
+   位置又正好是收起态的圆心（桌宠身上）。以前轮盘 z-index 在桌宠下面所以看不见，
+   第 260 步把轮盘提到上面之后，它就变成「karo 身上先浮出一个暗淡的任务按钮」。 */
+.wheel.is-open .wheel-item:disabled { opacity: .55; }
+
+.wheel-item:disabled:hover,
+.wheel-item:disabled:focus-visible {
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, .14);
+}
+
+/* ------------------------------------------------------------ 对话面板 */
+
+/* 默认隐藏（HTML 上有 hidden，由上面的 [hidden] 规则保证真的不显示）。
+   位置：屏幕右侧，纵向从底部延伸到约垂直中部 —— 底部贴边，
+   顶部最高到 50vh，因此"右侧底部到中间"。故意不掉垂直居中，
+   避免和屏幕正中的桌宠打架。 */
+.chat {
+  position: fixed;
+  right: 28px;
+  bottom: 24px;
+  z-index: 20;
+  width: min(420px, calc(100vw - 56px));
+  max-height: 50vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+  /* 第 140 步：顶部留一条**不参与滚动**的空白带，给右上角的 🗑 与 × 用。
+     两个按钮是绝对定位（top:6，28px 高），而 .chat-log 的第一条气泡原本从 18px 开始
+     —— 于是"晚上好啊"那条正好压在按钮底下（用户截图）。
+     用 padding-top 而不是给 .chat-log 加 margin：padding 属于容器，气泡滚动时
+     也进不到这条带子里，永远不会再叠上去。 */
+  padding-top: 36px;
+  /* 刻意不加入场动画：动画里的 transform 会和定位用的 transform 互相覆盖，
+     这正是上一轮"点 × 没反应"的同类隐患。 */
+}
+
+.chat-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg-soft);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat-close:hover { background: var(--surface-soft); color: var(--fg); }
+
+/* 清空这段对话：紧跟收起键左侧，同尺寸同风格（第 95 步） */
+.chat-clear {
+  position: absolute;
+  top: 6px;
+  right: 34px;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg-soft);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat-clear:hover { background: var(--surface-soft); color: var(--fg); }
+
+/* 清空确认：盖住**聊天窗口**本身（absolute 相对 .chat 的 fixed 定位），
+   而不是整个视口（第 95 步）。 */
+/* 「模型」小窗（第 100 步）：一家一行，当前那家高亮，用不了的那家灰掉。
+   它用自己的骨架宽度：三行「名字 + 模型名」比关于/设置那种一句话宽。 */
+.modal-box--model { width: min(340px, calc(100vw - 48px)); }
+
+.model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.model-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.model-item[data-active="true"] {
+  border-color: var(--accent);
+  background: var(--surface-soft);
+}
+
+.model-item:disabled { opacity: 0.5; cursor: default; }
+.model-name { font-size: 13px; }
+.model-meta { font-size: 11px; color: var(--fg-soft); }
+
+.model-probe {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-soft);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.model-result { margin: 8px 0 0; font-size: 12px; color: var(--fg-soft); min-height: 1em; }
+.model-usage {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--fg-soft);
+  min-height: 1em;
+}
+.model-result[data-ok="true"] { color: var(--accent); }
+
+.chat-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+
+.chat-confirm-box {
+  width: min(280px, calc(100% - 32px));
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-panel);
+}
+
+.chat-confirm-text { margin: 0 0 12px; font-size: 13px; color: var(--fg); }
+.chat-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.chat-confirm-btn {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--fg-soft);
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-confirm-btn--primary { border-color: var(--accent); color: var(--accent); }
+.chat-confirm-btn:hover { background: var(--surface-soft); color: var(--fg); }
+.chat-clear:disabled { opacity: 0.5; cursor: default; }
+
+.chat-log {
+  flex: 1;
+  min-height: 76px;
+  padding: 18px 16px 6px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* 第 146 步：滚动条改成一条**灰色细条**（用户要求）。
+     不写的话 Windows 会给带上下箭头的系统样式，在深色界面里很跳。 */
+  scrollbar-width: thin;
+  scrollbar-color: #4b5058 transparent;
+}
+
+.chat-log::-webkit-scrollbar { width: 8px; }
+
+.chat-log::-webkit-scrollbar-track { background: transparent; }
+
+.chat-log::-webkit-scrollbar-thumb {
+  background: #4b5058;
+  border-radius: 999px;
+}
+
+.chat-log::-webkit-scrollbar-thumb:hover { background: #5f656f; }
+
+.chat-log::-webkit-scrollbar-button { display: none; }
+
+.chat-log::-webkit-scrollbar-corner { background: transparent; }
+
+.msg {
+  max-width: 84%;
+  padding: 9px 13px;
+  border-radius: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.msg-user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 5px;
+}
+
+.msg-pet {
+  align-self: flex-start;
+  background: var(--surface-soft);
+  border-bottom-left-radius: 5px;
+}
+
+.msg-error {
+  align-self: flex-start;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* 出行对话（第 216 步）：把聊天框塞进出行窗口的第一页。
+   高度用 min() 是为了小窗口下不把输入框挤出可视区 —— 出行窗口比主聊天窗口矮。 */
+.travel-chat-log {
+  flex: 0 1 auto;
+  height: min(46vh, 320px);
+  margin-bottom: 10px;
+  border: 1px solid var(--term-line);
+  border-radius: 12px;
+  background: var(--term-card);
+}
+
+
+.travel-chat-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.travel-chat-input {
+  flex: 1;
+  resize: none;
+  min-height: 44px;
+  max-height: 120px;
+}
+
+.travel-chat-send {
+  flex: 0 0 auto;
+  min-width: 72px;
+}
+
+/* 出行对话里的路线图（第 227 步）。
+   图是服务端拿高德静态地图接口画的 PNG，所以这里只管尺寸和边框：
+   窄屏时撑满（别把 420px 硬撑出横向滚动），宽屏时限制在 420px 以内。 */
+.msg-travel-map {
+  margin: 8px 0 2px;
+  max-width: min(100%, 420px);
+}
+
+.msg-travel-map img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--term-line);
+  border-radius: 10px;
+  background: var(--term-card);
+}
+
+.msg-travel-map figcaption {
+  margin-top: 4px;
+  color: var(--term-muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.msg-travel-map.travel-map--broken {
+  padding: 8px 10px;
+  border: 1px dashed var(--term-line);
+  border-radius: 10px;
+}
+
+.travel-map-note {
+  margin: 0;
+  color: var(--term-muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* 快捷胶囊（第 24 步）：出行 / 邮箱 / 食谱。
+   位置在输入框正上方，横向可滚动，不换行挤占对话区。 */
+/* 功能栏的容器：左边一个「›」，右边是胶囊行（第 146 步）。
+   展开/收起由 .is-open 控制，按钮不换图标，只转 90°。 */
+.chat-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 8px;
+}
+
+.chat-tools-toggle {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface-soft);
+  color: var(--fg-soft);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform .16s ease, border-color .16s ease, color .16s ease;
+}
+
+.chat-tools-toggle:hover,
+.chat-tools-toggle:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chat-tools.is-open .chat-tools-toggle { transform: rotate(90deg); }
+
+.chips {
+  display: flex;
+  gap: 8px;
+  /* 内边距移到 .chat-tools 上了；这里只留滚动能力 */
+  padding: 0;
+  overflow-x: auto;
+  /* **不画横向滚动条**（第 146 步，用户要求）。仍然能滑：滚轮 / 触控板 / 拖动都行。 */
+  scrollbar-width: none;
+}
+
+.chips::-webkit-scrollbar { display: none; }
+
+.chip {
+  flex: none;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.chip:hover,
+.chip:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  outline: none;
+}
+
+.chip:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+
+/* 占位胶囊（邮箱 / 食谱）：本轮还没有功能。
+   做成明确"点不动"的样子，而不是看着能点却没反应。 */
+.chip:disabled {
+  color: var(--fg-soft);
+  opacity: .55;
+  cursor: default;
+}
+
+.chip:disabled:hover {
+  border-color: var(--line);
+  background: var(--surface-soft);
+  color: var(--fg-soft);
+}
+
+.composer {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.composer-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+}
+
+.composer-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.composer-send {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.composer-send:disabled { opacity: .5; cursor: default; }
+
+/* ---------------------------------------------------------------- 窄屏 */
+
+@media (max-width: 560px) {
+  /* 只改尺寸变量，定位与气泡偏移都从变量推导，不用重复写死数值 */
+  :root {
+    /* 与新素材同比例（150/150 = 1.0） */
+    --pet-w: 112px;
+    --pet-h: 112px;
+    --pet-radius: 18px;
+    /* 环绕小圆同步缩小，否则窄屏上会挤成一团。
+       半径 88/直径 38 而非 78/40：后者相邻圆心距仅 44.7px、
+       与直径 40px 只差 4.7px，挤得看不出均匀。 */
+    --wheel-btn: 38px;
+    --orbit: 88px;
+  }
+  .pet-body { font-size: 28px; }
+  .bubble { padding: 10px 12px; }
+
+  /* 窄屏改用底部铺满，右侧悬浮会太挤 */
+  .chat {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    bottom: 12px;
+    max-height: 44vh;
+  }
+
+  /* 窄屏一行放不下两项，轮盘收成单列 */
+  .wheel-list { grid-template-columns: minmax(0, max-content); }
+}
+
+/* 尊重系统的"减少动态效果"设置 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
+
+/* 买菜清单（第 126 步）：工具条只在勾选后出现；浮层复用详情浮层的骨架 */
+.shopping-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 0 0 6px;
+  border: 1px solid var(--line, #e6e2da);
+  border-radius: 10px;
+  background: var(--surface, #fffdf8);
+  font-size: 13px;
+}
+.shopping-bar[hidden] { display: none; }
+.shopping-count { color: var(--muted, #8a8378); }
+.shopping-open {
+  margin-left: auto;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--accent, #d98c4a);
+  background: var(--accent, #d98c4a);
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+/* 工具条上的 ×（第 137 步）：清空已选、整条收起。
+   以前这条只能靠"新建会话"消失，用户想单独关掉它没有出路。 */
+.shopping-clear {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted, #8a8378);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.shopping-clear:hover,
+.shopping-clear:focus-visible {
+  background: var(--surface-soft, #f2ede4);
+  color: var(--fg, #2b2622);
+  outline: none;
+}
+.shopping-open:hover { filter: brightness(1.05); }
+.shopping-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  overflow: auto;
+  background: var(--surface, #fffdf8);
+}
+.shopping-panel[hidden] { display: none; }
+.shopping-hint { margin: 0; font-size: 12px; color: var(--muted, #8a8378); }
+.shopping-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shopping-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #e6e2da);
+  border-radius: 8px;
+  font-size: 14px;
+}
+.shopping-item-name { font-weight: 600; }
+.shopping-item-amount { color: var(--accent, #d98c4a); }
+.shopping-item-from { font-size: 12px; color: var(--muted, #8a8378); }
+.shopping-actions { display: flex; align-items: center; gap: 10px; }
+.shopping-copy {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent, #d98c4a);
+  background: transparent;
+  color: var(--accent, #d98c4a);
+  cursor: pointer;
+  font-size: 13px;
+}
+.shopping-status { font-size: 12px; color: var(--muted, #8a8378); }
+
+/* 卡片上的勾选框：不触发"打开详情" */
+.recipe-answer-card { position: relative; }
+.recipe-pick {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+/* 行程导出（第 130 步） */
+.trip-export {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 4px;
+}
+.trip-export[hidden] { display: none; }
+.trip-export-btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent, #d98c4a);
+  background: transparent;
+  color: var(--accent, #d98c4a);
+  cursor: pointer;
+  font-size: 13px;
+}
+.trip-export-btn:hover { background: rgba(217, 140, 74, 0.08); }
+.trip-export-status { font-size: 12px; color: var(--muted, #8a8378); }
+
+/* 食谱「新建会话」（第 131 步） */
+.recipe-new {
+  margin-left: auto;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line, #e6e2da);
+  background: transparent;
+  color: var(--muted, #8a8378);
+  cursor: pointer;
+  font-size: 12px;
+}
+.recipe-new:hover { color: var(--accent, #d98c4a); border-color: var(--accent, #d98c4a); }
+/* 确认框的定位上下文（.chat-confirm 是 inset:0 的绝对定位）。
+   挂在 .recipe-chat-main 上，而不是给 #recipe-log 包一层 ——
+   包一层会让 log 失去 flex 子项身份，右侧栏会被挤出窗口（实测过）。 */
+.recipe-chat-main { position: relative; }
+
+/* 鉴权：token 输入浮层（第 254 步）
+   只在后端 401 时出现；本机模式永远不会渲染它。 */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 26, 22, 0.45);
+}
+.auth-card {
+  width: min(360px, calc(100vw - 48px));
+  padding: 20px;
+  border-radius: 14px;
+  background: var(--card, #fffaf3);
+  border: 1px solid var(--line, #e6e2da);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* 第 255 步：这张卡是浅色的，但页面在暗色主题下继承的是浅色文字 ——
+     继承下去就是「白字 + 米白底」，标题几乎看不见。这里显式定死深色。 */
+  color: #3a332c;
+}
+.auth-title { margin: 0; font-size: 16px; color: #2f2923; }
+.auth-hint { margin: 0; font-size: 12px; color: #6f675d; line-height: 1.6; }
+.auth-input {
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--line, #e6e2da);
+  background: #fff;
+  color: #2f2923;
+  font-size: 14px;
+}
+.auth-input::placeholder { color: #9a9388; }
+.auth-error { margin: 0; min-height: 16px; font-size: 12px; color: #c2473f; }
+.auth-submit {
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--accent, #d98c4a);
+  background: var(--accent, #d98c4a);
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}

@@ -1,0 +1,92 @@
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 第 179 步（评价13 O-1）：同一分支连推时取消上一次还没跑完的 run，
+# 省 runner 时间也避免"旧提交的绿灯"误导。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    # 用 Windows：这个项目在 Windows 上开发 —— 路径分隔符、SQLite 文件位置、
+    # verify_*.js 起 node 子进程，全都在这个环境验证过。
+    # 换到 ubuntu 不会多测出什么，只会多出一堆平台差异。
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      # GitHub 的 Windows runner 控制台是 cp1252（中文 Windows 是 GBK）。
+      # 本项目所有输出都是中文，不声明就会 UnicodeEncodeError（第 103 步）。
+      # 脚本自己也调了 core.console.force_utf8()，这里是给 pytest 与子进程兜底。
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          # 第 179 步（评价13 O-1）：依赖钉死版本，缓存 key 跟 requirements.txt 走
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          # 第 121 步：linter 不进 requirements.txt —— 它是开发工具，
+          # 不是运行期依赖；装在这里能让 CI 与本地版本解耦。
+          python -m pip install ruff
+
+      - name: Lint（ruff）
+        # 只看"几乎不可能有正当理由"的那一档（未定义名 / 未使用导入 / 重复定义 等）。
+        # 规则集与排除项写在 ruff.toml 里，并在那里解释了为什么不一次全开。
+        run: python -m ruff check .
+
+      - name: 主验证路径（前端结构 + 领域逻辑 + 接口接线 + DOM 桩行为）
+        # check_frontend.py 是项目自己的一体化验证脚本：
+        # 纯标准库的组直接跑；需要 fastapi/httpx 的组在"库装上了"时**真跑**，
+        # 而不是打桩让它变绿。装了依赖之后这里不会出现跳过。
+        run: python scripts/check_frontend.py
+
+      - name: 完整测试套件（pytest）
+        # 两条路都要跑，缺一不可：
+        #   - check_frontend.py 覆盖"项目自己的验证"，但它不支持 pytest 的 fixture，
+        #     所以有一部分文件（如 test_deepseek_llm 的 17 条流式解析）**跑不到**；
+        #   - pytest 才是完整的。
+        # 第 80 步之前这里只有前一条，于是出现过一个真实情况：
+        # 我改了识图路由，check_frontend 全绿，而 pytest 里两条挂了 ——
+        # 那正是"CI 绿 ≠ 有回归保护"。
+        run: python -m pytest -q
+
+  # 真浏览器烟测（第 122 步 / 评价7 P1-2）。
+  #
+  # 为什么单独一个 job：它要**开一个真 Chrome**，比单元测试慢、也更依赖环境；
+  # 挂在 verify job 里会让"测试挂了"和"浏览器起不来"混在一起。
+  #
+  # 第 124 步：**去掉 continue-on-error，门禁转硬**。
+  # 之前留软门禁是因为开发机的沙箱把 Chrome 拦在 crashpad 那一步，我无法本地验证；
+  # 而软门禁 + 挂错静态目录，让这个 job 变成了"永远绿但什么都没验"（评价8）。
+  # 现在：静态资源挂根、失败态元素改对、找不到浏览器退出码 2 —— CI 里 Chrome 是有的。
+  smoke:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: 真浏览器烟测（聊天流式 / 食谱卡片 / 出行失败）
+        run: python scripts/smoke_browser.py

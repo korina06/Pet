@@ -1,0 +1,646 @@
+{
+  "_comment": [
+    "检索质量的 holdout v3（第 189 步 / 评价15 T0-2）。前两份一个字都不改，这份是新的。",
+    "",
+    "为什么要第三份：v2 是在**看过实现之后**写的，而且第 186 步还照着它的两个 miss",
+    "调过场景词表 —— 它已经没有资格当泛化证据了。v3 的纪律是：",
+    "",
+    "  1. **写的时候不看场景词表**（core/recipe_scene_terms.py），只按「用户会怎么说」写；",
+    "  2. **跑之前冻结**（写完就不再改一个字），跑完只记录、不回改；",
+    "  3. 语义用例的 expect 由**种子事实**推出（这道菜是汤 / 是酸甜 / 是清淡），不抄工具输出；",
+    "  4. `expect_zero: true` 的用例是**真零命中** —— 库里确实没有这道菜，正确行为是",
+    "     「如实说没有」，返回任何一条都算错。",
+    "",
+    "零命中的 37 条全是「隔壁菜系 / 家常里短里库里没有的」：日料、韩餐、西餐、东南亚、",
+    "甜点饮品，以及饺子、包子、白粥、番茄炒蛋这类**太常见反而不在库**的。",
+    "",
+    "已知局限（写在这里，免得以后自己骗自己）：",
+    "  - 96 道菜的库很小，zero-hit 用例很好编，这不是「难」而是「缺」；",
+    "  - 语义用例的 expect 是人工标的，我可能漏标（P@5 会因此偏低）；",
+    "  - 这份是**一次性**的：跑完它就是基线，再调词表它就作废了。",
+    "v1 的错（第 189 步自己抓到并记下）：最初 args 全空 → keyword 为空 → 工具把**整个库 96 道**当候选，于是每条用例都返回同一批 6 道菜，37 条零命中全判错。那不是检索能力问题，是评测没按真实调用方式喂参数。现在每条都带 keyword。"
+  ],
+  "split": "holdout_v3",
+  "cases": [
+    {
+      "id": "v3-hands-grabbed-lamb",
+      "note": "「抓着啃」→ 手抓/手扒 类羊肉，语义上用户不会说「煮」或「炖」",
+      "query": "想吃能抓着啃的羊肉，越粗鲁越好",
+      "args": {
+        "keyword": "羊肉"
+      },
+      "expect": [
+        "手扒羊肉",
+        "手抓滩羊肉",
+        "烤羊肉串（烤箱版）",
+        "手抓饭"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v3-cold-noodle-hot-day",
+      "note": "「凉着吃的面」→ 冷面 / 酿皮（凉拌）",
+      "query": "天太热了，有没有凉着吃的面",
+      "args": {
+        "keyword": "面"
+      },
+      "expect": [
+        "延吉冷面",
+        "酿皮子"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v3-sour-sweet-pork",
+      "note": "酸甜口 + 猪肉：锅包肉、荔枝肉（都是酸甜、都是猪肉）",
+      "query": "想吃酸甜口的猪肉",
+      "args": {
+        "keyword": "猪肉"
+      },
+      "expect": [
+        "锅包肉",
+        "荔枝肉"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v3-post-surgery-soft",
+      "note": "术后只能吃软淡的：清淡 + 软 的汤菜",
+      "query": "刚做完手术，只能吃很软很淡的",
+      "args": {
+        "keyword": "软"
+      },
+      "expect": [
+        "大煮干丝",
+        "姜撞奶",
+        "清炖狮子头",
+        "汽锅鸡"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v3-lunchbox-reheat",
+      "note": "带饭、二次加热好吃 → 焖炖类的下饭菜",
+      "query": "想带饭，中午微波炉热一下还能吃的",
+      "args": {
+        "keyword": "饭"
+      },
+      "expect": [
+        "卤肉饭",
+        "本帮红烧肉",
+        "东坡肉"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v3-hangover-hot-sour-soup",
+      "note": "「热乎乎的辣汤」→ 胡辣汤（早餐、汤、微辣）",
+      "query": "宿醉，想喝口热乎乎的辣汤",
+      "args": {
+        "keyword": "辣汤"
+      },
+      "expect": [
+        "逍遥镇胡辣汤"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v3-with-yellow-wine",
+      "note": "配黄酒 → 咸鲜凉/白切的冷菜",
+      "query": "想弄个菜下黄酒",
+      "args": {
+        "keyword": "菜"
+      },
+      "expect": [
+        "盐水鸭",
+        "夫妻肺片",
+        "白切鸡"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v3-cooked-with-tea",
+      "note": "用茶叶做的菜：库里只有龙井虾仁（菜名里带茶）",
+      "query": "想用茶叶做一道菜",
+      "args": {
+        "keyword": "茶叶"
+      },
+      "expect": [
+        "龙井虾仁"
+      ],
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3-spicy-not-numbing",
+      "note": "要辣不要麻 → 湘菜/贵州的辣，不是川菜的麻辣",
+      "query": "要辣但是别麻",
+      "args": {
+        "keyword": "辣"
+      },
+      "expect": [
+        "剁椒鱼头",
+        "辣椒炒肉（农家小炒肉）",
+        "贵州辣子鸡"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v3-leftover-cabbage",
+      "note": "白菜囤多了：库里只有猪肉白菜炖粉条",
+      "query": "家里囤了好多白菜，能做什么",
+      "args": {
+        "keyword": "白菜"
+      },
+      "expect": [
+        "猪肉白菜炖粉条"
+      ],
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3-kid-safe-meat",
+      "note": "小孩吃、不能辣：白切/清蒸/炖的家禽和鱼",
+      "query": "给小孩吃的肉，一点辣都不能有",
+      "args": {
+        "keyword": "肉"
+      },
+      "expect": [
+        "白切鸡",
+        "文昌鸡（白斩）",
+        "小鸡炖蘑菇",
+        "清蒸鲈鱼"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v3-late-night-light-soup",
+      "note": "加班回家、要汤但别油：清炖类汤",
+      "query": "加班到十点，想喝口汤但是别太油",
+      "args": {
+        "keyword": "汤"
+      },
+      "expect": [
+        "腌笃鲜",
+        "老火靓汤 · 玉米胡萝卜猪骨汤",
+        "瓦罐肉饼汤",
+        "排骨藕汤"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v3z-sushi",
+      "note": "日料：库里没有生食/寿司",
+      "query": "想吃寿司和刺身",
+      "args": {
+        "keyword": "寿司"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-tonkotsu-ramen",
+      "note": "豚骨拉面：有「面」但没有拉面/豚骨",
+      "query": "拉面，要豚骨汤那种",
+      "args": {
+        "keyword": "拉面"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-tempura",
+      "note": "天妇罗",
+      "query": "天妇罗",
+      "args": {
+        "keyword": "天妇罗"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-budae-jjigae",
+      "note": "部队锅",
+      "query": "韩式部队锅",
+      "args": {
+        "keyword": "部队锅"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-bibimbap",
+      "note": "石锅拌饭",
+      "query": "石锅拌饭",
+      "args": {
+        "keyword": "拌饭"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-korean-fried-chicken",
+      "note": "韩式炸鸡配啤酒（有炸的鸡，但没有韩式炸鸡）",
+      "query": "韩式炸鸡配啤酒",
+      "args": {
+        "keyword": "炸鸡"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-thin-crust-pizza",
+      "note": "披萨",
+      "query": "薄底披萨",
+      "args": {
+        "keyword": "披萨"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-double-beef-burger",
+      "note": "汉堡（有猪扒包，但没有牛肉汉堡）",
+      "query": "汉堡要双层牛肉的",
+      "args": {
+        "keyword": "汉堡"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-bolognese",
+      "note": "意式肉酱面",
+      "query": "意式肉酱面",
+      "args": {
+        "keyword": "意面"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-lasagna",
+      "note": "千层面",
+      "query": "千层面",
+      "args": {
+        "keyword": "千层"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-caesar-salad",
+      "note": "凯撒沙拉（库里没有生菜沙拉）",
+      "query": "凯撒沙拉",
+      "args": {
+        "keyword": "沙拉"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-steak",
+      "note": "牛排",
+      "query": "牛排，要五分熟的",
+      "args": {
+        "keyword": "牛排"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-foie-gras",
+      "note": "法式鹅肝",
+      "query": "法式鹅肝",
+      "args": {
+        "keyword": "鹅肝"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-tom-yum",
+      "note": "冬阴功（有酸汤鱼，但那是贵州的）",
+      "query": "泰式冬阴功汤",
+      "args": {
+        "keyword": "冬阴功"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-pho",
+      "note": "越南河粉",
+      "query": "越南河粉",
+      "args": {
+        "keyword": "河粉"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-burrito",
+      "note": "墨西哥卷饼",
+      "query": "墨西哥卷饼",
+      "args": {
+        "keyword": "卷饼"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-fish-and-chips",
+      "note": "炸鱼薯条",
+      "query": "炸鱼薯条",
+      "args": {
+        "keyword": "薯条"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-tiramisu",
+      "note": "提拉米苏",
+      "query": "提拉米苏",
+      "args": {
+        "keyword": "提拉米苏"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-macaron",
+      "note": "马卡龙",
+      "query": "马卡龙",
+      "args": {
+        "keyword": "马卡龙"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-bubble-tea",
+      "note": "珍珠奶茶（库里有酥油茶/锅茶，但不是奶茶）",
+      "query": "珍珠奶茶",
+      "args": {
+        "keyword": "奶茶"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-ice-cream",
+      "note": "冰淇淋",
+      "query": "冰淇淋",
+      "args": {
+        "keyword": "冰淇淋"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-unagi-rice",
+      "note": "烤鳗鱼饭",
+      "query": "烤鳗鱼饭",
+      "args": {
+        "keyword": "鳗鱼饭"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-sandwich",
+      "note": "三明治",
+      "query": "三明治",
+      "args": {
+        "keyword": "三明治"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-croissant",
+      "note": "可颂（有菠萝包，但不是可颂）",
+      "query": "可颂面包",
+      "args": {
+        "keyword": "可颂"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-dumplings",
+      "note": "饺子：库里 96 道里一个都没有",
+      "query": "饺子，韭菜鸡蛋馅的",
+      "args": {
+        "keyword": "饺子"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-baozi",
+      "note": "包子",
+      "query": "包子，猪肉大葱的",
+      "args": {
+        "keyword": "包子"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-congee",
+      "note": "白粥配咸菜：库里有汤有饭，但没有粥",
+      "query": "白粥配咸菜",
+      "args": {
+        "keyword": "白粥"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-tomato-egg",
+      "note": "番茄炒蛋：最常见的家常菜，库里偏偏没有 —— 最容易误命中",
+      "query": "番茄炒蛋",
+      "args": {
+        "keyword": "番茄"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-crayfish",
+      "note": "小龙虾：库里有油焖大虾（虾但不是小龙虾），最容易骗过检索",
+      "query": "小龙虾，麻辣的",
+      "args": {
+        "keyword": "小龙虾"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-mala-xiangguo",
+      "note": "麻辣香锅",
+      "query": "麻辣香锅",
+      "args": {
+        "keyword": "香锅"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-rice-noodle-roll",
+      "note": "广式肠粉",
+      "query": "广式肠粉",
+      "args": {
+        "keyword": "肠粉"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-jidan-guanbing",
+      "note": "鸡蛋灌饼（有煎饼果子，但不是它）",
+      "query": "鸡蛋灌饼",
+      "args": {
+        "keyword": "灌饼"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-shengjian",
+      "note": "生煎包",
+      "query": "生煎包",
+      "args": {
+        "keyword": "生煎"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-xiaolongbao",
+      "note": "小笼包",
+      "query": "小笼包",
+      "args": {
+        "keyword": "小笼包"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-curry-rice",
+      "note": "咖喱饭",
+      "query": "咖喱饭",
+      "args": {
+        "keyword": "咖喱"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-smashed-cucumber",
+      "note": "拍黄瓜：最普通的凉菜，库里一个凉拌素菜都没有",
+      "query": "拍黄瓜",
+      "args": {
+        "keyword": "黄瓜"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    },
+    {
+      "id": "v3z-dry-pot-cauliflower",
+      "note": "干锅花菜",
+      "query": "干锅花菜",
+      "args": {
+        "keyword": "花菜"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": true,
+      "must": null
+    }
+  ]
+}

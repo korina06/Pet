@@ -1,0 +1,421 @@
+{
+  "_comment": [
+    "检索质量的 holdout v2（第 87 步 / B1）。与 v1 并存，v1 一个字都不改。",
+    "",
+    "为什么另开一份而不是改 v1：v1 记录的是「还没有 exclude_tags 时」的基线，",
+    "改它等于把证据擦掉。v2 的用途是衡量**当前能力** —— 它的 args 里可以有",
+    "第 77 步才加的参数（exclude_tags），也可以修正 v1 里标错的地方。",
+    "",
+    "标注纪律（v1 踩过的坑）：",
+    "  1. expect 由**种子事实**推出（菜名/标签/时间/食材），不是抄工具输出；",
+    "  2. expect_all=true 表示「这就是全部应得答案」，才允许算 P@5；",
+    "     拿不准完整性的（比如「想吃鸡」会把鸡蛋/鸡汤底也命中）就标 false，只算 hit@5；",
+    "  3. 这一份同样是**只报告、不设门槛**；难看就记下来，不回头调检索。",
+    "",
+    "字段与 v1 一致：args / expect / expect_all / must / note。"
+  ],
+  "split": "holdout_v2",
+  "cases": [
+    {
+      "id": "h2-sichuan-mild",
+      "note": "v1 的同一句话，现在可以用 exclude_tags 表达 —— 用来衡量新能力的收益",
+      "query": "川菜里不辣的有吗",
+      "args": {
+        "tags": [
+          "川菜"
+        ],
+        "exclude_tags": [
+          "辣"
+        ]
+      },
+      "must": {
+        "tags_all": [
+          "川菜"
+        ]
+      },
+      "expect": [
+        "鱼香肉丝"
+      ],
+      "expect_all": true
+    },
+    {
+      "id": "h2-light-fast",
+      "note": "两个正向条件叠加：清淡 ∩ ≤20 分钟（种子事实里正好 5 道）",
+      "query": "清淡又快手的，二十分钟内",
+      "args": {
+        "tags": [
+          "清淡"
+        ],
+        "max_minutes": 20
+      },
+      "must": {
+        "tags_all": [
+          "清淡"
+        ],
+        "max_minutes": 20
+      },
+      "expect": [
+        "清蒸鲈鱼",
+        "白灼虾",
+        "姜撞奶",
+        "大煮干丝",
+        "福州鱼丸"
+      ],
+      "expect_all": true
+    },
+    {
+      "id": "h2-breakfast-fast",
+      "note": "早餐 ∩ ≤30 分钟（种子事实 4 道，全部 25 分钟）",
+      "query": "早饭要吃，三十分钟内的",
+      "args": {
+        "tags": [
+          "早餐"
+        ],
+        "max_minutes": 30
+      },
+      "must": {
+        "tags_all": [
+          "早餐"
+        ],
+        "max_minutes": 30
+      },
+      "expect": [
+        "蒙古锅茶",
+        "酥油茶",
+        "逍遥镇胡辣汤",
+        "菠萝包"
+      ],
+      "expect_all": true
+    },
+    {
+      "id": "h2-light-no-seafood",
+      "note": "忌口（exclude）与正向标签同时生效：清淡 19 道里排掉含海鲜的 6 道",
+      "query": "海鲜过敏，想吃清淡的",
+      "args": {
+        "tags": [
+          "清淡"
+        ],
+        "exclude": [
+          "海鲜"
+        ]
+      },
+      "must": {
+        "tags_all": [
+          "清淡"
+        ]
+      },
+      "expect": [
+        "白切鸡",
+        "老火靓汤 · 玉米胡萝卜猪骨汤",
+        "姜撞奶",
+        "清炖狮子头",
+        "腌笃鲜",
+        "手扒羊肉",
+        "手抓滩羊肉",
+        "过桥米线",
+        "汽锅鸡",
+        "排骨藕汤",
+        "瓦罐肉饼汤",
+        "文昌鸡（白斩）",
+        "椰子鸡火锅"
+      ],
+      "expect_all": true
+    },
+    {
+      "id": "h2-chicken-not-spicy",
+      "note": "**标注只能是举例**：种子事实里「含鸡且非辣」有 16 道（含鸡蛋/鸡汤底的菜），而「想吃鸡」通常指鸡肉 —— 完整性无法声称，所以只算 hit@5",
+      "query": "想吃鸡，但是不要辣的",
+      "args": {
+        "ingredients": [
+          "鸡肉"
+        ],
+        "exclude_tags": [
+          "辣"
+        ]
+      },
+      "must": {},
+      "expect": [
+        "白切鸡",
+        "小鸡炖蘑菇",
+        "汽锅鸡",
+        "文昌鸡（白斩）",
+        "椰子鸡火锅"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "s1-tomato",
+      "category": "synonym",
+      "note": "「西红柿」→别名表已有 西红柿->番茄，命中 8 道含番茄的菜（这类**不是缺口**）；**只能举例**（不完整）：同类可接受的菜可能还有别的，只算 hit@5",
+      "query": "想吃西红柿做的菜",
+      "args": {
+        "keyword": "西红柿"
+      },
+      "expect": [
+        "糖醋鲤鱼",
+        "油焖大虾",
+        "松鼠鳜鱼（家常糖醋版）",
+        "荔枝肉"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "s2-potato",
+      "category": "synonym",
+      "note": "「洋芋」→别名表已有 洋芋->土豆，命中 5 道（这类**不是缺口**）；**只能举例**（不完整）：同类可接受的菜可能还有别的，只算 hit@5",
+      "query": "洋芋炖的",
+      "args": {
+        "keyword": "洋芋"
+      },
+      "expect": [
+        "尕面片",
+        "羊肉臊子面",
+        "锅包肉",
+        "大盘鸡",
+        "土豆炖牦牛肉"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "s3-coriander",
+      "category": "synonym",
+      "note": "「芫荽」→别名表已有 芫荽->香菜（12 道含香菜）；前 5 命中煎饼果子等；**只能举例**（不完整）：同类可接受的菜可能还有别的，只算 hit@5",
+      "query": "多点芫荽的",
+      "args": {
+        "keyword": "芫荽"
+      },
+      "expect": [
+        "煎饼果子",
+        "得莫利炖鱼",
+        "手抓滩羊肉",
+        "羊肉烩面"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "d1-drink-snack",
+      "category": "descriptive",
+      "note": "「下酒」不是标签（库里只有「下饭」）；**只能举例**（不完整）：同类可接受的菜可能还有别的，只算 hit@5",
+      "query": "有什么下酒的",
+      "args": {
+        "keyword": "下酒"
+      },
+      "expect": [
+        "葱爆羊肉",
+        "盐水鸭",
+        "夫妻肺片"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "d2-soft-food",
+      "category": "descriptive",
+      "note": "「牙口不好、想吃软的」没有任何字面命中；**只能举例**（不完整）：同类可接受的菜可能还有别的，只算 hit@5",
+      "query": "牙口不好，想吃点软的",
+      "args": {
+        "keyword": "软的"
+      },
+      "expect": [
+        "姜撞奶",
+        "清蒸鲈鱼",
+        "宁波猪油汤圆"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "d3-lighten",
+      "category": "descriptive",
+      "note": "「解腻」不是标签；库里靠「酸甜」「清淡」表达；**只能举例**（不完整）：同类可接受的菜可能还有别的，只算 hit@5",
+      "query": "有点腻，想吃解腻的",
+      "args": {
+        "keyword": "解腻"
+      },
+      "expect": [
+        "西湖醋鱼",
+        "姜撞奶"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "d4-nourishing-soup",
+      "category": "descriptive",
+      "note": "「补身子」不是标签；对应的是「养胃」汤类；**只能举例**（不完整）：同类可接受的菜可能还有别的，只算 hit@5",
+      "query": "想喝点补身子的汤",
+      "args": {
+        "keyword": "补身子"
+      },
+      "expect": [
+        "老火靓汤 · 玉米胡萝卜猪骨汤",
+        "排骨藕汤",
+        "汽锅鸡"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "m1-sweat",
+      "category": "method",
+      "note": "「发汗」在种子正文里 0 次；对应的是辣的汤粉；**只能举例**（不完整）：同类可接受的菜可能还有别的，只算 hit@5",
+      "query": "吃点能发汗的",
+      "args": {
+        "keyword": "发汗"
+      },
+      "expect": [
+        "柳州螺蛳粉",
+        "逍遥镇胡辣汤"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "m2-warm-body",
+      "category": "method",
+      "note": "「暖身子」正文只出现 1 次（蒙古锅茶）；**只能举例**（不完整）：同类可接受的菜可能还有别的，只算 hit@5",
+      "query": "想喝点暖身子的",
+      "args": {
+        "keyword": "暖身子"
+      },
+      "expect": [
+        "蒙古锅茶",
+        "老火靓汤 · 玉米胡萝卜猪骨汤"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "m3-quick-office",
+      "category": "descriptive",
+      "note": "「办公室快手午餐」= 快 + 清淡，需要语义拆解；**只能举例**（不完整）：同类可接受的菜可能还有别的，只算 hit@5",
+      "query": "办公室快手的午饭",
+      "args": {
+        "keyword": "快手午饭"
+      },
+      "expect": [
+        "武汉热干面",
+        "煎饼果子",
+        "葱油拌面"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "x1-drink-snack",
+      "category": "expanded",
+      "note": "「下酒」+ 菜名型扩展词（假设模型给得准）；**只能举例**（不完整），只算 hit@5",
+      "query": "有什么下酒的",
+      "args": {
+        "keyword": "下酒",
+        "search_terms": [
+          "酱牛肉",
+          "夫妻肺片",
+          "盐水鸭",
+          "白切鸡",
+          "花生米"
+        ]
+      },
+      "expect": [
+        "盐水鸭",
+        "夫妻肺片",
+        "白切鸡"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "x2-sweat",
+      "category": "expanded",
+      "note": "「发汗」+ 扩展词（酸辣/胡辣汤/螺蛳粉）；**只能举例**（不完整），只算 hit@5",
+      "query": "吃点能发汗的",
+      "args": {
+        "keyword": "发汗",
+        "search_terms": [
+          "酸辣",
+          "胡辣汤",
+          "螺蛳粉",
+          "麻辣"
+        ]
+      },
+      "expect": [
+        "柳州螺蛳粉",
+        "逍遥镇胡辣汤",
+        "酸辣粉"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "x3-soft-food",
+      "category": "expanded",
+      "note": "「牙口不好」+ 扩展词（清蒸/豆腐/汤圆）；**只能举例**（不完整），只算 hit@5",
+      "query": "牙口不好，想吃点软的",
+      "args": {
+        "keyword": "软的",
+        "search_terms": [
+          "清蒸",
+          "豆腐",
+          "汤圆",
+          "羹"
+        ]
+      },
+      "expect": [
+        "清蒸鲈鱼",
+        "麻婆豆腐",
+        "宁波猪油汤圆"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "x4-nourishing-soup",
+      "category": "expanded",
+      "note": "「补身子的汤」+ 扩展词（老火靓汤/排骨藕汤/汽锅鸡）；**只能举例**（不完整），只算 hit@5",
+      "query": "想喝点补身子的汤",
+      "args": {
+        "keyword": "补身子",
+        "search_terms": [
+          "老火靓汤",
+          "排骨藕汤",
+          "汽锅鸡",
+          "鸡汤"
+        ]
+      },
+      "expect": [
+        "老火靓汤 · 玉米胡萝卜猪骨汤",
+        "排骨藕汤",
+        "汽锅鸡"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "x5-lighten",
+      "category": "expanded",
+      "note": "「解腻」+ 扩展词（西湖醋鱼/凉拌/酸甜）；**只能举例**（不完整），只算 hit@5",
+      "query": "有点腻，想吃解腻的",
+      "args": {
+        "keyword": "解腻",
+        "search_terms": [
+          "西湖醋鱼",
+          "凉拌",
+          "酸甜"
+        ]
+      },
+      "expect": [
+        "西湖醋鱼"
+      ],
+      "expect_all": false
+    },
+    {
+      "id": "x6-warm-body",
+      "category": "expanded",
+      "note": "「暖身子」+ 扩展词（老火靓汤/锅茶/姜）；**只能举例**（不完整），只算 hit@5",
+      "query": "想喝点暖身子的",
+      "args": {
+        "keyword": "暖身子",
+        "search_terms": [
+          "老火靓汤",
+          "锅茶",
+          "姜撞奶"
+        ]
+      },
+      "expect": [
+        "老火靓汤 · 玉米胡萝卜猪骨汤",
+        "蒙古锅茶",
+        "姜撞奶"
+      ],
+      "expect_all": false
+    }
+  ]
+}

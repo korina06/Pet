@@ -1,0 +1,419 @@
+{
+  "_comment": [
+    "检索质量的 holdout v4（第 248 步）。v1/v2/v3 一个字都不改，这份是新的 30 条。",
+    "",
+    "为什么要第四份：v3 的有答案组只有 12 条，一条 miss = 8 个百分点，",
+    "用它算「失败率」分母太小。v4 固定 15 条有答案 + 15 条真零命中 = 30 条。",
+    "",
+    "纪律（与 v3 相同，写在文件里免得以后自己骗自己）：",
+    "  1. 写的时候不看场景词表（core/recipe_scene_terms.py），只按「用户会怎么说」写；",
+    "  2. **跑之前冻结**：这份 JSON 与守卫测试先提交，再跑真模型；跑完只记录、不回改；",
+    "  3. 有答案用例的 expect 由**种子事实**推出（这道菜是汤 / 是酸甜 / 是清淡），不抄工具输出；",
+    "  4. expect_zero 的用例是**真零命中**：库里确实没有，正确行为是「如实说没有」。",
+    "",
+    "已知局限：",
+    "  - 96 道菜的库很小，零命中用例很好编，这是「缺」不是「难」；",
+    "  - 语义用例的 expect 是人工标的，可能漏标（P@5 会因此偏低）；",
+    "  - 这份是**一次性**的：跑完它就是基线，再调词表/阈值它就作废。"
+  ],
+  "split": "holdout_v4",
+  "cases": [
+    {
+      "id": "v4-cold-noodle-hot-day",
+      "note": "「凉丝丝的面」→ 冷面类",
+      "query": "天太热了，想吃凉丝丝的面",
+      "args": {
+        "keyword": "面"
+      },
+      "expect": [
+        "延吉冷面"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-warm-soup-upset-stomach",
+      "note": "胃不舒服 → 热汤、养胃",
+      "query": "胃不太舒服，想喝点热汤",
+      "args": {
+        "keyword": "汤"
+      },
+      "expect": [
+        "老火靓汤 · 玉米胡萝卜猪骨汤",
+        "腌笃鲜",
+        "排骨藕汤",
+        "瓦罐肉饼汤",
+        "过桥米线"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-sweet-sour-pork",
+      "note": "酸甜 + 猪肉：锅包肉、荔枝肉",
+      "query": "想吃酸酸甜甜的猪肉",
+      "args": {
+        "keyword": "猪肉"
+      },
+      "expect": [
+        "锅包肉",
+        "荔枝肉"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-noodle-soup-hot",
+      "note": "连汤带水的热面 → 汤面类主食",
+      "query": "想连汤带水吃一碗热面",
+      "args": {
+        "keyword": "面"
+      },
+      "expect": [
+        "兰州牛肉面",
+        "羊肉烩面",
+        "台湾牛肉面",
+        "刀削面"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-soft-chicken-no-chew",
+      "note": "拔牙后 → 软乎的鸡肉，汽锅鸡/椰子鸡/白切鸡都算",
+      "query": "刚拔完牙，想吃软乎点的鸡肉",
+      "args": {
+        "keyword": "鸡"
+      },
+      "expect": [
+        "汽锅鸡",
+        "椰子鸡火锅",
+        "白切鸡"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-light-chicken-not-spicy",
+      "note": "清淡的鸡、不要辣 → 白切/白斩/汽锅/椰子鸡",
+      "query": "想吃清淡的鸡，一点辣都不要",
+      "args": {
+        "keyword": "鸡"
+      },
+      "expect": [
+        "白切鸡",
+        "文昌鸡（白斩）",
+        "汽锅鸡",
+        "椰子鸡火锅"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-salted-duck",
+      "note": "咸香口的鸭 → 盐水鸭、烤鸭",
+      "query": "想吃咸香口的鸭子",
+      "args": {
+        "keyword": "鸭"
+      },
+      "expect": [
+        "盐水鸭",
+        "北京烤鸭（家庭烤箱版）"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-fish-no-chili",
+      "note": "鱼、不要辣 → 清蒸/糖醋类",
+      "query": "想吃鱼，但一点辣都不要",
+      "args": {
+        "keyword": "鱼"
+      },
+      "expect": [
+        "清蒸鲈鱼",
+        "清蒸武昌鱼",
+        "西湖醋鱼",
+        "松鼠鳜鱼（家常糖醋版）"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-lamb-not-gamy",
+      "note": "羊肉、别太膻 → 手扒/手抓/葱爆",
+      "query": "想吃羊肉，别太膻的",
+      "args": {
+        "keyword": "羊肉"
+      },
+      "expect": [
+        "手扒羊肉",
+        "手抓滩羊肉",
+        "葱爆羊肉"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-oyster-omelette",
+      "note": "闽南海蛎小吃 → 海蛎煎",
+      "query": "想吃闽南那种用海蛎做的小吃",
+      "args": {
+        "keyword": "海蛎"
+      },
+      "expect": [
+        "海蛎煎（蚵仔煎）"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-coconut-chicken-soup",
+      "note": "清甜的椰子鸡汤 → 椰子鸡火锅",
+      "query": "想喝清甜的椰子鸡汤",
+      "args": {
+        "keyword": "椰子"
+      },
+      "expect": [
+        "椰子鸡火锅"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-mango-dessert",
+      "note": "芒果甜品 → 杨枝甘露",
+      "query": "想吃芒果做的甜品",
+      "args": {
+        "keyword": "芒果"
+      },
+      "expect": [
+        "杨枝甘露"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-breakfast-on-the-go",
+      "note": "边走边吃的早餐 → 煎饼果子、驴肉火烧",
+      "query": "早上想拿在手上边走边吃",
+      "args": {
+        "keyword": "饼"
+      },
+      "expect": [
+        "煎饼果子",
+        "驴肉火烧"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-sour-spicy-noodles",
+      "note": "又酸又辣的一碗粉 → 酸辣粉、螺蛳粉",
+      "query": "想吃又酸又辣的一碗粉",
+      "args": {
+        "keyword": "粉"
+      },
+      "expect": [
+        "酸辣粉",
+        "柳州螺蛳粉"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-steamed-fish-light",
+      "note": "蒸出来的鱼、口味淡 → 清蒸鲈鱼/武昌鱼",
+      "query": "想吃蒸出来的鱼，口味淡一点",
+      "args": {
+        "keyword": "鱼"
+      },
+      "expect": [
+        "清蒸鲈鱼",
+        "清蒸武昌鱼"
+      ],
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-sushi",
+      "note": "库里没有日料：正确行为是如实说没有",
+      "query": "想吃三文鱼寿司",
+      "args": {
+        "keyword": "寿司"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-pizza",
+      "note": "库里没有西餐",
+      "query": "晚上想点个披萨",
+      "args": {
+        "keyword": "披萨"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-burger",
+      "note": "库里没有汉堡",
+      "query": "想吃个汉堡配薯条",
+      "args": {
+        "keyword": "汉堡"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-curry-rice",
+      "note": "库里没有咖喱饭",
+      "query": "想吃咖喱饭",
+      "args": {
+        "keyword": "咖喱"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-tom-yum",
+      "note": "库里没有泰餐",
+      "query": "想喝冬阴功汤",
+      "args": {
+        "keyword": "冬阴功"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-pho",
+      "note": "库里没有越南河粉",
+      "query": "想吃越南河粉",
+      "args": {
+        "keyword": "河粉"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-army-stew",
+      "note": "库里没有韩餐",
+      "query": "想吃部队锅",
+      "args": {
+        "keyword": "部队锅"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-fried-chicken",
+      "note": "库里没有炸鸡（辣子鸡不是炸鸡）",
+      "query": "想吃韩式炸鸡",
+      "args": {
+        "keyword": "炸鸡"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-tonkotsu-ramen",
+      "note": "库里没有日式拉面",
+      "query": "想吃豚骨拉面",
+      "args": {
+        "keyword": "豚骨"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-malatang",
+      "note": "库里没有麻辣烫",
+      "query": "想吃麻辣烫",
+      "args": {
+        "keyword": "麻辣烫"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-xiaolongbao",
+      "note": "太常见反而不在库",
+      "query": "想吃小笼包",
+      "args": {
+        "keyword": "小笼包"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-congee",
+      "note": "太常见反而不在库",
+      "query": "想喝白粥配咸菜",
+      "args": {
+        "keyword": "白粥"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-tomato-egg",
+      "note": "太常见反而不在库",
+      "query": "想吃番茄炒蛋",
+      "args": {
+        "keyword": "番茄炒蛋"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-fried-rice",
+      "note": "太常见反而不在库",
+      "query": "想吃蛋炒饭",
+      "args": {
+        "keyword": "蛋炒饭"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    },
+    {
+      "id": "v4-zero-mille-crepe",
+      "note": "库里没有法式甜点",
+      "query": "想吃千层蛋糕",
+      "args": {
+        "keyword": "千层"
+      },
+      "expect": [],
+      "expect_zero": true,
+      "expect_all": false,
+      "must": null
+    }
+  ]
+}

@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="karo · 桌宠 Agent：点一下小猫，选择查天气或对话。">
+  <title>karo · 桌宠</title>
+  <!-- 纯本地资源：无外部库 / CDN / 字体；桌宠形象用本目录下的 pet.png -->
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+<!-- 第 224 步：出行地图的封装（高德脚本本身要到点开地图时才加载，见 map.js 开头） -->
+<script src="map.js" defer></script>
+</head>
+<body>
+  <noscript>
+    <p class="noscript">这个页面需要 JavaScript 才能和桌宠说话，请在浏览器设置里开启后刷新。</p>
+  </noscript>
+
+  <!-- 「模型」小窗（第 100 步）：轮盘里的「模型」打开它。
+       一家一个按钮，等于一组单选开关：点谁就把别家关掉（后端只记一个 current）。
+       用不了的那家**列出但禁用**，原因写在按钮里 —— 比"点了才报错"诚实。 -->
+  <div class="modal" id="model-modal" role="dialog" aria-modal="true"
+       aria-labelledby="model-title" hidden>
+    <div class="modal-box modal-box--model">
+      <h2 class="modal-title" id="model-title">模型</h2>
+
+      <div class="dialog-body">
+        <div class="model-list" id="model-providers"></div>
+        <button class="model-probe" id="model-probe" type="button">测一下当前这个</button>
+        <p class="model-result" id="model-probe-result" aria-live="polite"></p>
+        <!-- 今日用量（第 111 步）：数字由 /api/usage/summary 给，静态 HTML 不留文案 -->
+        <p class="model-usage" id="model-usage"></p>
+      </div>
+
+      <button class="modal-close" id="model-close" type="button"
+              aria-label="关闭模型窗口" title="关闭">×</button>
+    </div>
+  </div>
+
+  <!-- 「关于」小窗已在第 209 步随侧边栏一并删除：
+       它唯一的入口是侧边栏的「关于」标签，桌宠本体不需要这一段介绍。 -->
+
+  <!-- 「出行」窗口：点聊天框上方的「出行」胶囊后弹出（第 24 步）。
+       第 25 步起是**两个标签页**：
+         1) 填写信息：目的地/日期/偏好等表单，点「确定」交给模型生成
+         2) 计划概览：等生成完成后才切过去，内容是留空的框，UI 之后再定
+       视觉走"命令行"风格（等宽字体 + 灰底），只在 .terminal 范围内生效，
+       不影响页面其它部分。 -->
+  <div class="modal" id="travel-modal" role="dialog" aria-modal="true"
+       aria-labelledby="travel-title" hidden>
+    <div class="modal-box modal-box--travel terminal">
+      <h2 class="modal-title" id="travel-title">出行推荐</h2>
+
+      <!-- 标签栏。像浏览器一样：
+           「聊聊」与「自己填」常驻且不可关闭（第 216 步：默认先聊，聊不明白再自己填）；
+           「计划概览」点过确定后出现、可关闭；
+           每个打开过的「第x天」都会在这里占一个标签（由 app.js 动态插入）。
+           标签本体在下面 tabs 容器里，「关闭 ×」在 app.js 生成标签时一并插入。 -->
+      <div class="tabs" id="travel-tabs" role="tablist" aria-label="出行">
+        <button class="tab is-active" id="travel-tab-chat" type="button"
+                role="tab" aria-selected="true" aria-controls="travel-page-chat">聊聊</button>
+        <button class="tab" id="travel-tab-form" type="button"
+                role="tab" aria-selected="false" aria-controls="travel-page-form">自己填（可选）</button>
+        <span class="tab tab--closable" id="travel-tab-plan" role="tab"
+              aria-selected="false" aria-controls="travel-page-plan" hidden>
+          <button class="tab-label" id="travel-tab-plan-label" type="button">计划概览</button>
+          <button class="tab-close" id="travel-tab-plan-close" type="button"
+                  title="关闭「计划概览」" aria-label="关闭「计划概览」标签">×</button>
+        </span>
+      </div>
+
+      <!-- 第 216 步：第一页改成「聊聊」。
+           为什么把表单从第一页挤下去：用户的原话是"出行要像它那样能聊"，
+           而表单是"我已经知道自己要什么"时才用的出口；先聊两句最省事。
+           聊天页不做流式（工具调用 + 事后核对都在服务端一次做完），
+           所以这里只要一个列表 + 一个输入框，简单可靠。 -->
+      <section class="tab-page" id="travel-page-chat" role="tabpanel"
+               aria-labelledby="travel-tab-chat">
+        <div class="chat-log travel-chat-log" id="travel-chat-log" role="log"
+             aria-live="polite" aria-label="出行对话"></div>
+        <form class="travel-chat-form" id="travel-chat-form" novalidate>
+          <textarea class="tinput travel-chat-input" id="travel-chat-input" rows="2"
+                    placeholder="想去哪儿、几天、跟谁一起、有什么讲究……"></textarea>
+          <button class="travel-submit travel-chat-send" id="travel-chat-send"
+                  type="submit">发送</button>
+        </form>
+      </section>
+
+      <!-- 第二页：自己填。按参考图分成三块卡片：目的地与日期 / 偏好设置 / 额外要求。
+           第 216 步把它从第一页挪到第二页，内容与提交逻辑一字未改。 -->
+      <section class="tab-page" id="travel-page-form" role="tabpanel"
+               aria-labelledby="travel-tab-form" hidden>
+        <!-- 第 197 步（评价15 B2）：关掉窗口再打开时，如果上次那份行程还在服务端内存里，
+             在这里给一条能点回去的提示 —— 但**不自动跳转**。
+             为什么不自动跳：「填写信息」页永远是新行程的起点（第 30 步），
+             一开门就显示上次的结果会让新行程串场；把选择权留给用户点一下。 -->
+          <p class="travel-resume" id="travel-resume" role="status" hidden>
+            <span class="travel-resume-text" id="travel-resume-text">上次有一份行程</span>
+            <button class="travel-resume-btn" id="travel-resume-open" type="button">接着看</button>
+            <button class="travel-resume-btn travel-resume-btn--quiet"
+                    id="travel-resume-drop" type="button">不要了</button>
+          </p>
+          <form class="travel-form" id="travel-form" novalidate>
+            <section class="tcard">
+            <h3 class="tcard-title"><span class="tcard-icon" aria-hidden="true">📍</span>目的地与日期</h3>
+            <div class="tgrid tgrid--dest">
+              <!-- 第 231 步：出发地在目的地**左边**（用户要求的位置）。
+                   它是可选的：不确定出发地就不填，不影响生成。
+                   目前只用于「概览里写清从哪出发」＋ 聊天上下文，还不参与排程。 -->
+              <label class="tfield">
+                <span class="tlabel">出发地</span>
+                <input class="tinput" id="travel-origin" type="text" list="travel-city-options"
+                       placeholder="例如：上海" autocomplete="off" spellcheck="false">
+              </label>
+
+              <label class="tfield">
+                <span class="tlabel">目的地城市 <b class="treq">*</b></span>
+                <input class="tinput" id="travel-city" type="text" list="travel-city-options"
+                       placeholder="例如：北京" autocomplete="off" spellcheck="false">
+              </label>
+              <!-- 第 219 步：目的地候选。清单是本地常量（常见城市 + 最近去过的），
+                   不联网、不等；填清单上没有的城市照样能提交，后端地理编码才是权威。 -->
+              <datalist id="travel-city-options"></datalist>
+
+              <label class="tfield">
+                <span class="tlabel">开始日期 <b class="treq">*</b></span>
+                <input class="tinput" id="travel-start" type="date">
+              </label>
+
+              <label class="tfield">
+                <span class="tlabel">结束日期 <b class="treq">*</b></span>
+                <input class="tinput" id="travel-end" type="date">
+              </label>
+
+              <div class="tfield">
+                <span class="tlabel">旅行天数</span>
+                <output class="tdays" id="travel-days" for="travel-start travel-end"
+                        aria-live="polite"></output>
+              </div>
+            </div>
+          </section>
+
+          <section class="tcard">
+            <h3 class="tcard-title"><span class="tcard-icon" aria-hidden="true">⚙️</span>偏好设置</h3>
+            <div class="tgrid tgrid--prefs">
+              <label class="tfield">
+                <span class="tlabel">交通方式</span>
+                <select class="tinput" id="travel-transport">
+                  <option>公共交通</option>
+                  <option>自驾</option>
+                  <option>步行 + 打车</option>
+                  <option>不限</option>
+                </select>
+              </label>
+
+              <label class="tfield">
+                <span class="tlabel">住宿偏好</span>
+                <select class="tinput" id="travel-stay">
+                  <option>经济型酒店</option>
+                  <option>舒适型酒店</option>
+                  <option>高档酒店</option>
+                  <option>民宿</option>
+                  <option>不住宿</option>
+                </select>
+              </label>
+
+              <fieldset class="tfield tfield--prefs">
+                <legend class="tlabel">旅行偏好</legend>
+                <div class="pref-list">
+                  <label class="pref"><input type="checkbox" id="pref-culture" value="历史文化">🏛 历史文化</label>
+                  <label class="pref"><input type="checkbox" id="pref-nature" value="自然风光">🌲 自然风光</label>
+                  <label class="pref"><input type="checkbox" id="pref-food" value="美食">🍜 美食</label>
+                  <label class="pref"><input type="checkbox" id="pref-shopping" value="购物">🛍 购物</label>
+                  <label class="pref"><input type="checkbox" id="pref-art" value="艺术">🎨 艺术</label>
+                  <label class="pref"><input type="checkbox" id="pref-relax" value="休闲">☕ 休闲</label>
+                </div>
+              </fieldset>
+            </div>
+          </section>
+
+          <section class="tcard">
+            <h3 class="tcard-title"><span class="tcard-icon" aria-hidden="true">💬</span>额外要求</h3>
+            <label class="tfield">
+              <textarea class="tinput" id="travel-note" rows="3"
+                        placeholder="例如：带老人小孩、第三天下午想留空…（只记进备注，不参与筛选）"></textarea>
+            </label>
+          </section>
+
+          <p class="travel-error" id="travel-error" role="alert" hidden></p>
+
+          <button class="travel-submit" id="travel-submit" type="submit">确定</button>
+        </form>
+      </section>
+
+      <!-- 第二页：计划概览。点「确定」后创建并切到这里（第 27 步）。
+           生成过程中显示进度条；完成后渲染**后端返回的真实行程**（第 41 步）。
+           版式参考用户给的图：右侧主区
+           （标题卡：日期/建议 → 每日行程折叠列表）。
+           顶部的「返回首页 / 编辑行程 / 导出行程」按用户要求不做。 -->
+      <section class="tab-page" id="travel-page-plan" role="tabpanel"
+               aria-labelledby="travel-tab-plan" hidden>
+        <div class="plan-progress" id="plan-progress" hidden>
+          <div class="plan-bar" role="progressbar" aria-label="正在生成行程计划"
+               aria-valuemin="0" aria-valuemax="100"><i></i></div>
+          <p class="plan-progress-text">正在生成行程计划…</p>
+        </div>
+
+        <!-- 降级/校验提示条（第 41 步）。放在概览之上：
+             后端没拿到的数据、当天塞不下的行程都必须被看见——
+             静默降级是这次改造要根治的问题。复用 .travel-error 的样式。 -->
+        <p class="travel-error" id="plan-notice" role="status" hidden></p>
+
+        <div class="overview" id="travel-overview" hidden>
+          <!-- 主区：标题卡 + 每日行程。
+               最左侧原来有个「景点地图」占位卡片，第 45 步按用户要求去掉了
+               （地图接不了、留着也没用）。 -->
+          <div class="ov-main">
+            <section class="ov-hero">
+              <h3 class="ov-hero-title" id="overview-title"></h3>
+              <div class="ov-facts">
+                <div class="ov-card">
+                  <p class="ov-card-label">📅 日期</p>
+                  <p class="ov-card-value" id="overview-dates"></p>
+                </div>
+                <div class="ov-card">
+                  <p class="ov-card-label">💡 建议</p>
+                  <p class="ov-card-value" id="overview-advice"></p>
+                </div>
+              </div>
+            </section>
+
+            <!-- 地图（第 224 步，第 225 步挪到标题卡与每日行程之间）：
+                 默认只有一行「展开地图」，点了才去下载高德那约 1 MB 的脚本。
+                 没有配置 JS API 的 key 时整块不出现——出行其它部分一点不受影响。
+                 正方形、靠右，左边留白（用户 m07438 定的位置和尺寸）。 -->
+            <section class="ov-map" id="travel-map-card" hidden>
+              <div class="ov-map-head">
+                <h3 class="ov-section-title"><span aria-hidden="true">📍</span>景点地图</h3>
+                <div class="ov-map-days" id="travel-map-days" role="tablist"
+                     aria-label="按天查看地图"></div>
+                <button class="ov-map-toggle" id="travel-map-toggle" type="button"
+                        aria-expanded="false" aria-controls="travel-map">展开地图</button>
+              </div>
+              <div class="ov-map-body">
+                <div class="ov-map-canvas" id="travel-map" role="application"
+                     aria-label="行程地图" hidden></div>
+              </div>
+              <p class="ov-map-note" id="travel-map-note" role="status" hidden></p>
+            </section>
+
+            <section class="ov-days">
+              <h3 class="ov-section-title"><span aria-hidden="true">📊</span>每日行程</h3>
+              <!-- 每天的条目由 app.js 生成：点「第x天」才创建并切到详情页 -->
+              <!-- 导出（第 130 步）：服务端渲染文本，前端只负责复制 -->
+          <!-- 第 218 步：多一个「存为 .md」，内容同样是服务端渲染的（带地图链接） -->
+          <div class="trip-export">
+            <button class="trip-export-btn" id="trip-export" type="button">复制行程</button>
+            <button class="trip-export-btn" id="trip-markdown" type="button">存为 .md</button>
+            <span class="trip-export-status" id="trip-export-status" role="status"></span>
+          </div>
+          <div class="day-list" id="day-list"></div>
+            </section>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- 第三页起：某一天的行程详情。点概览页的「第x天」才创建并切过来。
+           内容来自后端 Itinerary（第 41 步）。
+           顶部原来有「✏️ 编辑行程」「⬇️ 导出行程」两个 disabled 占位按钮，
+           第 46 步按用户要求删掉（两个功能都没做，留着只有噪音）。 -->
+      <section class="tab-page" id="travel-page-day" role="tabpanel"
+               aria-labelledby="travel-tab-day" hidden>
+        <header class="day-actions">
+          <h3 class="day-title" id="day-title"></h3>
+        </header>
+        <div class="day-body" id="day-body"></div>
+      </section>
+
+      <!-- 标签栏里的「第x天」按钮已在上面；详情页内容由 app.js 填充 -->
+
+      <button class="modal-close" id="travel-close" type="button"
+              aria-label="关闭出行窗口" title="关闭">×</button>
+    </div>
+  </div>
+
+  <!-- 「邮箱」窗口（第 33 步）：点聊天框上方的「邮箱」胶囊后弹出。
+       尺寸严格按用户要求：min(1100px, 92vw) × min(820px, 90vh)。
+       **登入前后都在这一窗口内**，只切页、不新开窗口：
+         1) mail-page-login：添加邮箱（参考图 2，元素居中，其余留白）
+         2) mail-page-inbox：收件箱（参考图 1，去掉左上角 logo 与搜索框下方的工具栏）
+       左上角 logo 按要求去掉，两页各留一个等高的空位（.mail-logo-slot），
+       这样"去掉 logo"后版式不会整体往上跳。
+       输入框不写可见标签、只用 placeholder —— 这是照看图 2 的白底圆角框，
+       但每个输入都带 aria-label，屏幕阅读器仍然读得出来。 -->
+  <div class="modal" id="mail-modal" role="dialog" aria-modal="true"
+       aria-labelledby="mail-title" hidden>
+    <div class="modal-box modal-box--mail">
+
+      <!-- 第 1 页：添加邮箱（登入前） -->
+      <section class="mail-page mail-page--login" id="mail-page-login">
+        <div class="mail-logo-slot" aria-hidden="true"></div>
+
+        <div class="mail-intro">
+          <h2 class="mail-title" id="mail-title">添加邮箱</h2>
+          <p class="mail-subtitle">支持个人邮箱和企业邮箱</p>
+        </div>
+
+        <form class="mail-form" id="mail-form" novalidate>
+          <input class="mail-input" id="mail-address" type="email" inputmode="email"
+                 autocomplete="username" spellcheck="false"
+                 aria-label="邮箱账号" placeholder="邮箱账号">
+
+          <input class="mail-input" id="mail-secret" type="password"
+                 autocomplete="current-password"
+                 aria-label="授权码" placeholder="授权码">
+
+          <!-- 服务商提示：按域名自动认出来，或提示"暂不支持" -->
+          <p class="mail-hint" id="mail-provider-hint"></p>
+
+          <p class="mail-error" id="mail-error" role="alert" hidden></p>
+
+          <button class="mail-submit" id="mail-submit" type="submit">添加</button>
+        </form>
+
+        <!-- 「选择邮箱服务」：展开服务商列表（本轮只有 QQ 邮箱一项） -->
+        <button class="mail-service-link" id="mail-service-toggle" type="button"
+                aria-expanded="false" aria-controls="mail-services">选择邮箱服务</button>
+        <div class="mail-services" id="mail-services" hidden></div>
+      </section>
+
+      <!-- 第 2 页：收件箱（登入后）。
+           左侧文件夹 + 顶部搜索框 + 邮件列表；没有勾选框/删除/移动/更多。 -->
+      <section class="mail-page mail-page--inbox" id="mail-page-inbox" hidden>
+        <aside class="mail-rail">
+          <div class="mail-logo-slot" aria-hidden="true"></div>
+          <nav class="mail-folders" id="mail-folders" aria-label="邮箱文件夹"></nav>
+
+          <!-- 当前账号 + 退出。原文要求"登入前后内容都在这一窗口内"，
+               没有退出就没有回到登入页的路径，两个状态互相到不了。 -->
+          <div class="mail-account">
+            <p class="mail-account-address" id="mail-account"></p>
+            <button class="mail-logout" id="mail-logout" type="button">退出</button>
+          </div>
+        </aside>
+
+        <div class="mail-main">
+          <header class="mail-searchbar">
+            <span class="mail-search-icon" aria-hidden="true">🔍</span>
+            <input class="mail-search" id="mail-search" type="search"
+                   placeholder="搜索" aria-label="搜索邮件" autocomplete="off">
+          </header>
+
+          <!-- 列表由 app.js 生成：按 今天/昨天/星期X/上周 分组 -->
+          <div class="mail-list" id="mail-list"></div>
+
+          <!-- 收取中 / 空文件夹 / 出错都在这里说一句话。
+               不这么做的话失败就是一片空白，用户分不清"没邮件"还是"坏了"（第 32 步的教训） -->
+          <p class="mail-state" id="mail-state" role="status" hidden></p>
+        </div>
+      </section>
+
+      <button class="modal-close" id="mail-close" type="button"
+              aria-label="关闭邮箱窗口" title="关闭">×</button>
+    </div>
+  </div>
+
+  <!-- 「食谱」窗口（第 37 步）：点聊天框上方的「食谱」胶囊后弹出。
+       尺寸按用户要求：min(1100px, 92vw) × min(820px, 90vh)。
+
+       布局参考用户给的图，但按要求去掉了**顶部标题栏、右上角用户区、左下角设置**：
+       剩下左栏导航 + 中间对话/菜单 + 右栏需求画像与快捷问题。
+
+       左栏只做两项（需求填写 / 饮食计划）。参考图里的「我的食谱」「我的食材」
+       都需要持久化才能成立，而本项目明确"不做数据库"，
+       所以本轮不做、也**不摆两个点不动的占位项**（第 24 步立的规矩：
+       不能点就别装成能点）。
+
+       中间是"一句一句说"的需求收集：用户怎么说话都行，模型负责把话归到
+       requires.txt 那四组维度上（维度本身在右栏显示出来，缺什么也写在上面）。
+       所有内容中的中文（开场白、维度名、快捷问题、餐次、免责声明）都来自
+       GET /api/recipe/schema，前端不硬编码 —— 加一个维度只改 core/recipes.py。
+       只有界面骨架文案（左栏两项、按钮、卡片标题）留在 HTML 里，与邮箱窗口一致。 -->
+  <div class="modal" id="recipe-modal" role="dialog" aria-modal="true"
+       aria-labelledby="recipe-title" hidden>
+    <div class="modal-box modal-box--recipe">
+
+      <!-- 首页（第 48 步改版）：中上是可横滑的菜谱卡片，底部是对话入口。
+           按用户要求：左栏那两项导航（需求填写 / 饮食计划）去掉了——
+           首页自己就是入口，"点卡片直接看做法"和"点底部说一句"是两条并列的路。
+           顶部**不写**"为你推荐 / 共 N 道"，右侧**不做**左右箭头（用户明确去掉），
+           翻页只靠「换一批」；也不写"已按忌口隐藏 N 条"这类说明。
+           「您好，想吃点什么？」是对话入口，点它 → 卡片栏向上滑走、对话页出现。 -->
+      <section class="recipe-home" id="recipe-home">
+
+        <h2 class="recipe-title" id="recipe-title">食谱</h2>
+
+        <!-- 菜谱卡片：横向滚动（触控板/滚轮可滑），内容由 app.js 按 /api/recipe/library 渲染。
+             刻意不加 role=list/listitem：卡片本身是按钮，硬塞 listitem 会盖掉
+             "这是按钮"的语义，读屏反而更难用。 -->
+        <div class="recipe-cards" id="recipe-cards"
+             aria-label="菜谱推荐" tabindex="0"></div>
+
+        <!-- 库里一道菜都没有时显示：一个明确的动作，而不是空白 -->
+        <div class="recipe-cards-empty" id="recipe-cards-empty" hidden>
+          <p class="recipe-cards-empty-text">菜谱库还是空的。</p>
+          <button class="recipe-seed" id="recipe-seed" type="button">载入示例菜谱</button>
+        </div>
+
+        <button class="recipe-refresh" id="recipe-refresh" type="button">换一批</button>
+
+        <!-- 对话入口：固定在首页底部。点它 = 进对话页（卡片栏向上滑走） -->
+        <button class="recipe-chat-entry" id="recipe-chat-entry" type="button">
+          <span class="recipe-chat-entry-text">您好，想吃点什么？</span>
+        </button>
+      </section>
+
+      <!-- 对话页：完整对话（默认隐藏），从首页的对话入口进入。
+           左上角一个返回箭头回到推荐，右侧是需求画像与快捷问题。 -->
+      <section class="recipe-chat" id="recipe-chat-page" hidden>
+        <header class="recipe-chat-head">
+          <button class="recipe-back" id="recipe-back" type="button"
+                  aria-label="返回推荐" title="返回推荐">←</button>
+          <h2 class="recipe-chat-title">菜谱助手</h2>
+          <!-- 新建会话（第 131 步）：清掉这段对话，忌口与菜谱库不动 -->
+          <button class="recipe-new" id="recipe-new" type="button"
+                  title="新建会话" aria-label="新建会话">新建</button>
+        </header>
+
+        <div class="recipe-chat-body">
+          <div class="recipe-chat-main">
+            <!-- 买菜清单入口（第 126 步）：勾了卡片才出现，避免空白工具条。
+                 第 137 步补了 ×：之前这一条只能靠"新建会话"消失，用户没法单独关掉。 -->
+            <div class="shopping-bar" id="shopping-bar" hidden>
+              <span class="shopping-count" id="shopping-count"></span>
+              <button class="shopping-open" id="shopping-open" type="button">生成买菜清单</button>
+              <button class="shopping-clear" id="shopping-clear" type="button"
+                      title="清空已选" aria-label="清空已选">×</button>
+            </div>
+
+            <div class="recipe-log" id="recipe-log" role="log" aria-live="polite"
+                 aria-label="需求对话"></div>
+
+            <!-- 确认框挂在这里（.recipe-chat-main 是 position: relative）。
+                 刻意**不**给 #recipe-log 加一层 wrapper：它是 flex 子项，
+                 多包一层会让 flex:1 1 auto 与 min-height:0 失效 —— 右侧栏会被挤出窗口。 -->
+            <div class="chat-confirm" id="recipe-confirm" hidden>
+                <div class="chat-confirm-box" role="dialog" aria-modal="true"
+                     aria-labelledby="recipe-confirm-text">
+                  <p class="chat-confirm-text" id="recipe-confirm-text"></p>
+                  <div class="chat-confirm-actions">
+                    <button class="chat-confirm-btn" id="recipe-confirm-cancel" type="button"></button>
+                    <button class="chat-confirm-btn chat-confirm-btn--primary"
+                            id="recipe-confirm-ok" type="button"></button>
+                  </div>
+                </div>
+            </div>
+
+            <!-- 图片预览（第 60 步）：选了图才显示，可点 × 去掉 -->
+            <div class="recipe-photo-preview" id="recipe-photo-preview" hidden>
+              <img class="recipe-photo-thumb" id="recipe-photo-thumb" alt="待发送的图片">
+              <span class="recipe-photo-name" id="recipe-photo-name"></span>
+              <button class="recipe-photo-remove" id="recipe-photo-remove" type="button"
+                      title="去掉这张图" aria-label="去掉这张图">×</button>
+            </div>
+
+            <form class="recipe-composer" id="recipe-composer" novalidate>
+              <input class="recipe-input" id="recipe-input" type="text" autocomplete="off"
+                     enterkeyhint="send" aria-label="说说你的需求"
+                     placeholder="说一句你的需求…">
+              <!-- 上传图片（第 60 步）：放在发送键左边。也可以直接把图拖进对话框 -->
+              <button class="recipe-photo-btn" id="recipe-photo-btn" type="button"
+                      title="上传一张菜的照片" aria-label="上传一张菜的照片">📷</button>
+              <input class="recipe-photo-input" id="recipe-photo-input" type="file"
+                     accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+              <button class="recipe-send" id="recipe-send" type="submit"
+                      title="发送" aria-label="发送">↑</button>
+            </form>
+
+            <p class="recipe-error" id="recipe-error" role="alert" hidden></p>
+          </div>
+
+          <!-- 右栏（第 50 步改版）：**一个框，装两组标签按钮**。
+               原来的「你的需求」「试试这样说」两张卡都删掉了（用户要求），
+               免责声明也去掉。
+
+               为什么要分两组（用户确认过）：只有「不吃」这类是**长期记住**的
+               （"人的口味有时很随机"，记口味反而碍事）；
+               口味/怎么吃/工具/时间只影响这一次。两组在视觉上要能分辨，
+               否则用户点了「清淡」会以为被记住了。
+
+               标签按钮的文案、分组、选项全部来自
+               GET /api/recipe/library/preferences，前端不硬编码。 -->
+          <aside class="recipe-aside" id="recipe-aside">
+            <section class="recipe-card">
+              <div class="recipe-tag-group">
+                <p class="recipe-tag-group-title">一直记住 · 不吃</p>
+                <div class="recipe-tags" id="recipe-tags-avoid"></div>
+              </div>
+
+              <div class="recipe-tag-group">
+                <p class="recipe-tag-group-title">这次想要</p>
+                <div class="recipe-want-groups" id="recipe-tags-want"></div>
+              </div>
+            </section>
+          </aside>
+        </div>
+
+        <!-- 第 50 步：原来的「生成多天菜单（旧流程）」折叠区**已删除**。
+             用户明确要求："不需要生成多天食谱的功能，只要用户问的这一餐"。
+             对话现在走 /api/recipe/ask → 模型查库 → 回复里带真实菜谱卡片。 -->
+      </section>
+
+      <!-- 菜谱详情浮层：点首页的卡片弹出。盖在窗口内部（不是又一个全屏 modal），
+           显示所需材料与制作流程。 -->
+      <section class="recipe-detail" id="recipe-detail" hidden
+               role="dialog" aria-modal="true" aria-labelledby="recipe-detail-title">
+        <header class="recipe-detail-head">
+          <h2 class="recipe-detail-title" id="recipe-detail-title"></h2>
+          <button class="recipe-detail-close" id="recipe-detail-close" type="button"
+                  aria-label="关闭详情" title="关闭">×</button>
+        </header>
+        <p class="recipe-detail-meta" id="recipe-detail-meta"></p>
+        <div class="recipe-detail-body" id="recipe-detail-body"></div>
+      </section>
+
+      <!-- 买菜清单浮层（第 126 步）：数量原样保留，不做加法 -->
+      <section class="shopping-panel" id="shopping-panel" hidden
+               role="dialog" aria-modal="true" aria-labelledby="shopping-title">
+        <header class="recipe-detail-head">
+          <h2 class="recipe-detail-title" id="shopping-title">买菜清单</h2>
+          <button class="recipe-detail-close" id="shopping-close" type="button"
+                  aria-label="关闭清单" title="关闭">×</button>
+        </header>
+        <p class="shopping-hint" id="shopping-hint"></p>
+        <ul class="shopping-items" id="shopping-items"></ul>
+        <div class="shopping-actions">
+          <button class="shopping-copy" id="shopping-copy" type="button">复制清单</button>
+          <span class="shopping-status" id="shopping-status" role="status"></span>
+        </div>
+      </section>
+
+      <button class="modal-close" id="recipe-close" type="button"
+              aria-label="关闭食谱窗口" title="关闭">×</button>
+    </div>
+  </div>
+
+  <!-- 「签到」窗口（第 40 步）：点轮盘上的「签到」小圆后弹出。
+       按要求"窗口做得稍微大一些"：宽度比其它窗口宽一档，日历格子才放得下
+       下面那几行小字（见 style.css 的 .modal-box--checkin）。
+
+       内容是**日历表**：一整月的日期铺在 7 列网格里。第 146 步起每格从下到上是
+         1. 日期数字（最大）
+         2. 节日名（"国庆节""中秋节"，有节日才显示）
+         3. 农历日期（"廿四"；初一显示"九月"这类月份名）
+         4. 已签 / 未签（最小的一行）
+       右上角还有"休 / 班"小标（放假 / 调休补班）。
+
+       农历、节日、放假调休都是**真实数据**：农历来自 core/lunar.py 的历表，
+       调休来自 core/holidays.py 抄的国务院办公厅通知原文（2024–2026）。
+       没有官方安排的年份就不显示休/班——宁可没有，也不猜。
+
+       规矩：**还没到的日期不写状态、不可点、不加框**（用户原话"还没到的日期
+       不算"）；今天用蓝色特效标出（不写"今天"二字）；过去的日子悬停/点击时
+       用灰蓝色；**已签不加颜色标记**，只靠"已签"两个字区分。
+       过去的日子可补签，要消耗一张「补签卡」，没有卡就提示"未持有补签卡"。
+
+       失败提示**不放在窗口底部**：补签没成功时，红字直接写在那一天的
+       "未签"下面（那一格多一行），用户不用自己找是哪天。
+
+       文案（标题、星期、格子里那几个字、"未持有补签卡"）都由后端给，
+       前端不硬编码——加一种状态只改 core/checkin.py。 -->
+  <div class="modal" id="checkin-modal" role="dialog" aria-modal="true"
+       aria-labelledby="checkin-title" hidden>
+    <div class="modal-box modal-box--checkin">
+      <h2 class="modal-title" id="checkin-title">签到</h2>
+
+      <!-- 月份栏：‹ 翻月 · 月份标题 · 翻月 ›
+           放到哪天由后端决定（can_prev / can_next），前端只负责禁用按钮。 -->
+      <div class="cal-bar">
+        <button class="cal-nav" id="checkin-prev" type="button"
+                aria-label="上一个月" title="上一个月">‹</button>
+        <p class="cal-month" id="checkin-month-label" aria-live="polite"></p>
+        <button class="cal-nav" id="checkin-next" type="button"
+                aria-label="下一个月" title="下一个月">›</button>
+      </div>
+
+      <!-- 日历表。**整张表由 app.js 现画**（见 renderCheckinCalendar）：
+           一行的列数、月初要空几格、每个格子写什么，都按后端返回的
+           days 顺序铺，前端不做日期数学。
+
+           这一行文字有两个用途（同一处，免得两个错误区各说各话）：
+           取数前是"正在打开日历…"，取数失败时就是那句失败原因
+           （连日历都没拿到，没有哪一格可以挂提示）。 -->
+      <div class="cal-body">
+        <p class="cal-state" id="checkin-state">正在打开日历…</p>
+        <table class="cal-table" id="checkin-grid" hidden>
+          <thead>
+            <tr id="checkin-weekdays"></tr>
+          </thead>
+          <tbody id="checkin-days"></tbody>
+        </table>
+      </div>
+
+      <!-- 补签确认：做在窗口**内部**的小框，不用浏览器原生的 confirm。
+           原生框长得跟页面无关、还把整个窗口遮住；而且"要不要花一张卡"
+           本来就是这张日历上的决定，就地问更清楚。
+           文案与按钮由 app.js 填（卡名来自后端）。 -->
+      <div class="cal-confirm" id="checkin-confirm" hidden>
+        <div class="cal-confirm-box" role="dialog" aria-modal="true"
+             aria-labelledby="checkin-confirm-text">
+          <p class="cal-confirm-text" id="checkin-confirm-text"></p>
+          <div class="cal-confirm-actions">
+            <button class="cal-confirm-btn" id="checkin-confirm-cancel" type="button">取消</button>
+            <button class="cal-confirm-btn cal-confirm-btn--primary" id="checkin-confirm-ok"
+                    type="button">确定</button>
+          </div>
+        </div>
+      </div>
+
+      <button class="modal-close" id="checkin-close" type="button"
+              aria-label="关闭签到窗口" title="关闭">×</button>
+    </div>
+  </div>
+
+  <!-- 桌宠：页面上唯一的常驻元素，只有形象图，不带任何文字 -->
+  <div class="pet" id="pet">
+    <!-- 第 198 步（评价15 B6）：桌宠自己说的话。
+         是一个真按钮而不是纯图：要能用 Tab 走到、回车触发；气泡里只有一行字，
+         点了直接开邮箱并定位到那封新邮件。`hidden` 由 app.js 控制。 -->
+    <button class="pet-note" id="pet-note" type="button" hidden>
+      <span class="pet-note-text" id="pet-note-text"></span>
+    </button>
+
+    <div class="bubble" id="bubble" role="status" aria-live="polite" hidden>
+      <i></i><i></i><i></i>
+    </div>
+
+    <!-- 轮盘菜单：选项由 GET /api/tools 生成 + 内置的"对话"，点击桌宠时展开 -->
+    <nav class="wheel" id="menu" aria-label="选择要做什么" hidden>
+      <div class="wheel-list" id="menu-list"></div>
+    </nav>
+
+    <button class="pet-body" id="pet-button" type="button"
+            aria-haspopup="true" aria-expanded="false" aria-controls="menu"
+            aria-label="打开菜单" title="点我">
+      <!-- 桌宠形象。图片加载失败时回退成 emoji，避免按钮变成一片空白、用户不知道能点 -->
+      <!-- 动作层（第 153 步）：webm VP9-alpha，由 app.js 按动作播放；其余时间显示下面的静帧。
+           muted + playsinline：桌宠没有声音，桌面端也不该全屏接管。 -->
+      <video class="pet-idle" id="pet-idle" muted playsinline preload="auto"
+             aria-hidden="true"></video>
+      <img class="pet-image" id="pet-image" src="pet.png" alt="桌宠 karo"
+           onerror="this.hidden = true; this.nextElementSibling.hidden = false;">
+      <span class="pet-fallback" aria-hidden="true" hidden>🐾</span>
+    </button>
+
+      <!-- 动作菜单（第 150 步）：点轮盘「动作」后从桌宠旁边弹出，竖着排。
+           样式照桌面右键菜单（一块面板 + 一条条可点的行），不是新开一个窗口。 -->
+      <div class="action-menu" id="action-menu" role="menu" aria-label="桌宠动作" hidden></div>
+  </div>
+
+  <!-- 对话面板：默认隐藏，点了"对话"或轮盘里的工具后才出现 -->
+  <section class="chat" id="chat" aria-label="对话" hidden>
+    <button class="chat-close" id="chat-close" type="button" title="收起" aria-label="收起对话">×</button>
+    <!-- 清空这段对话（第 95 步）：历史落库后只增不减，需要一个出口 -->
+    <button class="chat-clear" id="chat-clear" type="button"
+            title="清空这段对话" aria-label="清空这段对话">🗑</button>
+
+    <div class="chat-log" id="chat-log" role="log" aria-live="polite" aria-label="对话记录"></div>
+
+    <!-- 快捷意图：按后端 /api/tools 里 menu=false 的工具生成（第 23 步）。
+         一个工具都没有时这一行整体隐藏，由 app.js 决定。
+         它是"输入方式的现场喊话"，不是工具调用记录，与第 15 步去掉的提示不冲突。 -->
+    <!-- 功能栏（出行 / 邮箱 / 食谱）收在一个「›」里：点开、再点收起（第 146 步）。 -->
+    <div class="chat-tools" id="chat-tools">
+      <button class="chat-tools-toggle" id="chat-more" type="button"
+              aria-expanded="false" aria-controls="chat-chips" title="更多功能">›</button>
+      <div class="chips" id="chat-chips" hidden></div>
+    </div>
+
+    <!-- 清空确认：做在聊天窗口**内部**的小框，不用浏览器原生 confirm
+         （与签到窗口的补签确认同一个理由：原生框跟页面无关、还阻塞脚本）。
+         文案由 app.js 填。 -->
+    <div class="chat-confirm" id="chat-confirm" hidden>
+      <div class="chat-confirm-box" role="dialog" aria-modal="true"
+           aria-labelledby="chat-confirm-text">
+        <p class="chat-confirm-text" id="chat-confirm-text"></p>
+        <div class="chat-confirm-actions">
+          <!-- 文字由 app.js 填：静态 HTML 留文字会撞"常驻区域不许有文字"（第 3 步） -->
+          <button class="chat-confirm-btn" id="chat-confirm-cancel" type="button"></button>
+          <button class="chat-confirm-btn chat-confirm-btn--primary" id="chat-confirm-ok"
+                  type="button"></button>
+        </div>
+      </div>
+    </div>
+
+    <form class="composer" id="composer" novalidate>
+      <input class="composer-input" id="user-input" type="text"
+             placeholder="说点什么…" aria-label="输入消息"
+             autocomplete="off" enterkeyhint="send">
+      <button class="composer-send" id="send-btn" type="submit" title="发送" aria-label="发送">↑</button>
+    </form>
+  </section>
+</body>
+</html>

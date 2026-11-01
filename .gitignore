@@ -1,0 +1,78 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+
+# 第 47 步起 SQLite 库文件落在 data/（运行时生成，不应入库）
+data/
+
+# 依赖安装 / 测试产生的临时目录，不应入库
+.wheels/
+.piptmp/
+.pipcache/
+.pytest_cache/
+
+# 排查沙箱权限时留下的临时目录。
+# 这批目录带「Everyone 拒绝删除」的权限项，在受限模式下删不掉，
+# 只能靠忽略它们来避免 git 反复报警告（见 README「已知环境问题」）。
+.probe_dir/
+pytestprobe/
+mode_probe*/
+probe_mode700/
+probe-unpack-*/
+.testtmp/
+tmp*/
+pip-build-tracker-*/
+pip-ephem-wheel-cache-*/
+pip-install-*/
+pip-unpack-*/
+pip-target-*/
+pytest-cache-files-*/
+.chrome-verify/
+
+# 备份包（scripts/backup_data.py 生成，含 4.7MB 图片库，不该进仓库）
+backups/
+# pytest 的 --basetemp 目录（这批也被那条 ACL 挡住，读不了）
+.ptmp*/
+# 第 263 步：pytest 在某些环境下把 tmp_path 建在这里，同样被 ACL 锁住删不掉
+.pytest_tmp*/
+
+# 交接笔记只给本会话/本人看：含本机绝对路径、私人文件名、给下一个会话的指令。
+# 第 242 步起不进仓库（工作区文件保留）。
+docs/HANDOVER.md
+
+# 第 268 步：过目待删的东西（含临时产物、旧日志、过期文档），不进仓库
+垃圾桶/
+
+# 第 269 步：本机私人文件（评审稿、人设、清理清单、自测图、素材目录）——只在自己机器上
+评价*.md
+人设.md
+错误*.md
+清理清单.md
+recipe_rework_plan.md
+1.png
+set/
+
+# AGENTS.md 是给 AI 的协作准则，只对本机有用（可在 git rm --cached 后随时移回根目录）
+AGENTS.md
+
+# 运行时日志与备份
+*.log
+*.bak
+*.bak-*
+
+# 第 270 步：docs 只提交 FAILURES.md 与 SCALE.md，其余私人笔记只留本机
+
+# 第 271 步：docs 一律不进仓库（用户：这些本机看就行，不交出去）
+docs/
+
+# 第 271 步：一次性导入/数据脚本只在本机（跑通不需要它们）
+/scripts/import_action.py
+/scripts/import_recipe_images.py
+/scripts/import_recipe_md.py
+/scripts/build_labels.py
+/scripts/relabel_recipes.py
+/scripts/set_action_meta.py
+/scripts/build_recipe_vectors.py
+/scripts/verify_keys.py
+/scripts/e2e_real.py

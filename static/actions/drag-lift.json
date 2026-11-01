@@ -1,0 +1,45 @@
+{
+  "name": "drag-lift",
+  "label": "被拎起来",
+  "icon": "🤏",
+  "pool": "manual",
+  "weight": 1.0,
+  "role": "drag-lift",
+  "canvas": [
+    300,
+    300
+  ],
+  "size": {
+    "first": {
+      "left": 6,
+      "right": 172,
+      "top": 15,
+      "bottom": 285,
+      "width": 166,
+      "height": 270
+    },
+    "last": {
+      "left": 0,
+      "right": 177,
+      "top": 10,
+      "bottom": 266,
+      "width": 177,
+      "height": 256
+    },
+    "union": {
+      "left": 0,
+      "right": 182,
+      "top": 10,
+      "bottom": 285,
+      "width": 182,
+      "height": 275
+    },
+    "scale": 0.583153,
+    "target_height": 270,
+    "footline": 285,
+    "reference": "first"
+  },
+  "frames": 48,
+  "seconds": 3.2,
+  "source": "10月26日.mp4"
+}

@@ -1,0 +1,45 @@
+{
+  "name": "drag-swing",
+  "label": "来回荡",
+  "icon": "🎐",
+  "pool": "manual",
+  "weight": 1.0,
+  "role": "drag-swing",
+  "canvas": [
+    300,
+    300
+  ],
+  "size": {
+    "first": {
+      "left": 0,
+      "right": 183,
+      "top": 8,
+      "bottom": 270,
+      "width": 183,
+      "height": 262
+    },
+    "last": {
+      "left": 2,
+      "right": 179,
+      "top": 8,
+      "bottom": 269,
+      "width": 177,
+      "height": 261
+    },
+    "union": {
+      "left": 0,
+      "right": 186,
+      "top": 8,
+      "bottom": 270,
+      "width": 186,
+      "height": 262
+    },
+    "scale": 0.595455,
+    "target_height": 262,
+    "footline": 270,
+    "reference": "first"
+  },
+  "frames": 18,
+  "seconds": 1.2,
+  "source": "10月26日(1).mp4"
+}

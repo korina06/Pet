@@ -1,0 +1,17 @@
+# Runtime dependencies, pinned to the versions verified on this machine.
+# Keep this file PURE ASCII: pip decodes requirements.txt with the local code page
+# (GBK on Chinese Windows), so non-ASCII comments make `pip install -r` fail
+# with UnicodeDecodeError (review 11, P2-2).
+#
+# Versions are pinned on purpose (an unpinned test toolchain is another variable).
+# Rationale for the pins lives in README (install section), not in this file.
+
+fastapi==0.136.3
+uvicorn[standard]==0.52.4
+httpx==0.28.1
+pydantic==2.13.4
+pydantic-settings==2.15.0
+# MCP client (used by tools/mcp_remote.py for external servers such as 12306).
+mcp==1.16.0
+pytest==9.1.1
+pytest-asyncio==1.4.0

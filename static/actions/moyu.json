@@ -1,0 +1,45 @@
+{
+  "name": "moyu",
+  "label": "摸鱼",
+  "icon": "💤",
+  "pool": "manual",
+  "weight": 1.0,
+  "role": "action",
+  "canvas": [
+    300,
+    300
+  ],
+  "size": {
+    "first": {
+      "left": 65,
+      "right": 233,
+      "top": 15,
+      "bottom": 286,
+      "width": 168,
+      "height": 271
+    },
+    "last": {
+      "left": 65,
+      "right": 233,
+      "top": 16,
+      "bottom": 286,
+      "width": 168,
+      "height": 270
+    },
+    "union": {
+      "left": 0,
+      "right": 293,
+      "top": 11,
+      "bottom": 287,
+      "width": 293,
+      "height": 276
+    },
+    "scale": 0.615034,
+    "target_height": 270,
+    "footline": 285,
+    "reference": "first"
+  },
+  "frames": 173,
+  "seconds": 11.53,
+  "source": "minimax-h3-1793018232853411.mp4"
+}

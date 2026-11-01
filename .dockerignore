@@ -1,0 +1,38 @@
+# 不进镜像的东西（第 195 步 / 评价15 T2-7）。
+#
+# 原则：**能重建的不拷、是秘密的不拷、是本地状态的不拷**。
+
+# 秘密：.env 里有 API key，绝不能烤进镜像层
+.env
+.env.*
+
+# 本地状态：库、日志、备份、评测临时目录都在这里
+data/
+.testtmp/
+*.db
+*.db-wal
+*.db-shm
+
+# Python 缓存与虚拟环境
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# 版本库与编辑器
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+
+# 用户自己的审计文档与素材（评价N.md、人设.md、截图…）与打包产物
+评价*.md
+人设.md
+错误*.md
+set/
+dist/
+build/
+*.spec

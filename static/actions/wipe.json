@@ -1,0 +1,45 @@
+{
+  "name": "wipe",
+  "label": "擦擦灰",
+  "icon": "🧹",
+  "pool": "manual",
+  "weight": 2.0,
+  "role": "action",
+  "canvas": [
+    300,
+    300
+  ],
+  "size": {
+    "first": {
+      "left": 21,
+      "right": 187,
+      "top": 15,
+      "bottom": 285,
+      "width": 166,
+      "height": 270
+    },
+    "last": {
+      "left": 20,
+      "right": 187,
+      "top": 15,
+      "bottom": 285,
+      "width": 167,
+      "height": 270
+    },
+    "union": {
+      "left": 0,
+      "right": 202,
+      "top": 10,
+      "bottom": 285,
+      "width": 202,
+      "height": 275
+    },
+    "scale": 0.573248,
+    "target_height": 270,
+    "footline": 285,
+    "reference": "first"
+  },
+  "frames": 120,
+  "seconds": 8.0,
+  "source": "minimax-h3-1792949101690184.mp4"
+}

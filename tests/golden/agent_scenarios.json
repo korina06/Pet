@@ -1,0 +1,1146 @@
+{
+  "_comment": [
+    "Agent 端到端场景（第 118 步 / 评价7 P0-2）。",
+    "",
+    "为什么不用真实模型：这些断言要能在 CI 里 30 秒跑完、不花钱。真模型只用于",
+    "手工的 e2e（scripts/e2e_real.py），两者的分工写进 README。",
+    "",
+    "断言的对象是**跨场景不变量**，不是复述单测：该不该调工具、调了哪个、参数对不对、",
+    "失败有没有回灌、步数有没有失控、最终回答有没有引用不存在的东西。",
+    "",
+    "字段：",
+    "  messages   用户说的话（可多轮前置）",
+    "  script     模型脚本：{text} 或 {tool,args} 或 {fail}（模型级失败）或 {spend:token数}",
+    "  registry   用到的假工具（lookup / weather / boom / slow / echo）",
+    "  max_steps  Agent 的步数上限",
+    "  budget     轮级 token 预算（0 = 不限）",
+    "  expect     断言（见 scripts/eval_agent.py 的 _check）"
+  ],
+  "cases": [
+    {
+      "id": "a-chat-no-tool",
+      "note": "闲聊不该调工具：调了就是浪费钱",
+      "messages": [
+        "今天有点累"
+      ],
+      "registry": [
+        "echo"
+      ],
+      "script": [
+        {
+          "text": "那就早点休息呀"
+        }
+      ],
+      "expect": {
+        "tools": [],
+        "steps": 0,
+        "final_contains": [
+          "休息"
+        ],
+        "states": [
+          "plan",
+          "answer"
+        ]
+      }
+    },
+    {
+      "id": "b-one-tool-then-answer",
+      "note": "该调的工具要调，参数要对，然后据实回答",
+      "messages": [
+        "帮我查一下 天气"
+      ],
+      "registry": [
+        "lookup"
+      ],
+      "script": [
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "天气"
+          }
+        },
+        {
+          "text": "查到啦：天气是晴"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "lookup"
+        ],
+        "args": {
+          "lookup": {
+            "q": "天气"
+          }
+        },
+        "steps": 1,
+        "final_contains": [
+          "晴"
+        ],
+        "states": [
+          "plan",
+          "act",
+          "observe",
+          "plan",
+          "answer"
+        ]
+      }
+    },
+    {
+      "id": "c-two-tools-in-one-turn",
+      "note": "一次里要调两个工具：都执行、结果按顺序回灌；注意 reply.steps 目前数的是**工具执行次数**（2），不是模型往返次数（model_calls=2）",
+      "messages": [
+        "查一下 A 和 B"
+      ],
+      "registry": [
+        "lookup",
+        "slow"
+      ],
+      "script": [
+        {
+          "tools": [
+            {
+              "tool": "lookup",
+              "args": {
+                "q": "A"
+              }
+            },
+            {
+              "tool": "slow",
+              "args": {
+                "delay": 0
+              }
+            }
+          ]
+        },
+        {
+          "text": "A 和 B 都查好了"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "lookup",
+          "slow"
+        ],
+        "steps": 2,
+        "model_calls": 2,
+        "final_contains": [
+          "都查好了"
+        ]
+      }
+    },
+    {
+      "id": "d-tool-error-is-fed_back",
+      "note": "工具炸了不能把整轮弄挂：错误要回灌给模型，由它解释",
+      "messages": [
+        "用那个会炸的工具"
+      ],
+      "registry": [
+        "boom"
+      ],
+      "script": [
+        {
+          "tool": "boom",
+          "args": {}
+        },
+        {
+          "text": "那个工具暂时用不了，换一个？"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "boom"
+        ],
+        "steps": 1,
+        "final_contains": [
+          "用不了"
+        ],
+        "second_call_sees_failure": true
+      }
+    },
+    {
+      "id": "e-unknown-tool-is_graceful",
+      "note": "模型点名一个不存在的工具：不崩、要回灌；账上记为一次尝试",
+      "messages": [
+        "用不存在的工具"
+      ],
+      "registry": [
+        "echo"
+      ],
+      "script": [
+        {
+          "tool": "no_such_tool",
+          "args": {}
+        },
+        {
+          "text": "我没有那个工具"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "no_such_tool"
+        ],
+        "final_contains": [
+          "没有那个工具"
+        ]
+      }
+    },
+    {
+      "id": "f-bad-args-do_not_crash",
+      "note": "参数不合法：工具不该崩，错误要能回灌",
+      "messages": [
+        "参数写错了也要能继续"
+      ],
+      "registry": [
+        "lookup"
+      ],
+      "script": [
+        {
+          "tool": "lookup",
+          "raw_args": "{not json"
+        },
+        {
+          "text": "参数好像不对，再来一次？"
+        }
+      ],
+      "expect": {
+        "steps": 1,
+        "final_contains": [
+          "参数"
+        ]
+      }
+    },
+    {
+      "id": "g-model-failure-is_readable",
+      "note": "模型挂了：给一句人话，不许把栈丢给用户",
+      "messages": [
+        "随便说点什么"
+      ],
+      "registry": [],
+      "script": [
+        {
+          "fail": "DeepSeek 限流（HTTP 429）"
+        }
+      ],
+      "expect": {
+        "readable_error": true,
+        "final_not_contains": [
+          "Traceback",
+          "HTTPStatusError"
+        ],
+        "states": [
+          "plan",
+          "degrade"
+        ]
+      }
+    },
+    {
+      "id": "h-step-exhaustion-stops",
+      "note": "模型一直要工具：必须在 max_steps 处停，不能死循环",
+      "messages": [
+        "无限循环"
+      ],
+      "registry": [
+        "lookup"
+      ],
+      "max_steps": 2,
+      "script": [
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "1"
+          }
+        },
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "2"
+          }
+        },
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "3"
+          }
+        },
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "4"
+          }
+        }
+      ],
+      "expect": {
+        "steps": 2,
+        "model_calls": 2,
+        "final_contains": [
+          "2 步"
+        ],
+        "states": [
+          "plan",
+          "act",
+          "observe",
+          "plan",
+          "act",
+          "observe",
+          "degrade"
+        ]
+      }
+    },
+    {
+      "id": "i-budget-stops-before-next-call",
+      "note": "轮级预算：超了就不发下一次调用（不是'发完再判断'）",
+      "messages": [
+        "一直查"
+      ],
+      "registry": [
+        "lookup"
+      ],
+      "budget": 15000,
+      "script": [
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "1"
+          },
+          "spend": 15000
+        },
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "2"
+          },
+          "spend": 15000
+        },
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "3"
+          },
+          "spend": 15000
+        }
+      ],
+      "expect": {
+        "model_calls": 1,
+        "final_contains": [
+          "token 预算"
+        ],
+        "states": [
+          "plan",
+          "act",
+          "observe",
+          "plan",
+          "degrade"
+        ]
+      }
+    },
+    {
+      "id": "j-history-is_used",
+      "note": "多轮：第二轮的请求里要带上前一轮的问答（上下文没丢）",
+      "registry": [],
+      "script": [
+        {
+          "text": "记住啦小明"
+        },
+        {
+          "text": "你叫小明"
+        }
+      ],
+      "expect": {
+        "model_calls": 2,
+        "messages_in_second_call_min": 4,
+        "final_contains": [
+          "小明"
+        ]
+      },
+      "turns": [
+        [
+          "我叫小明"
+        ],
+        [
+          "我叫什么？"
+        ]
+      ]
+    },
+    {
+      "id": "k-parallel-two-tools-keep-model-order",
+      "note": "一轮里点两件事：执行可以并发，但**回灌顺序必须按模型给的顺序**（乱序会让 A 的结果被当成 B 的答案）",
+      "messages": [
+        "查天气，顺便查一下甲"
+      ],
+      "registry": [
+        "weather",
+        "lookup"
+      ],
+      "script": [
+        {
+          "tools": [
+            {
+              "tool": "weather",
+              "args": {}
+            },
+            {
+              "tool": "lookup",
+              "args": {
+                "q": "甲"
+              }
+            }
+          ]
+        },
+        {
+          "text": "晴；甲也查到了"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "weather",
+          "lookup"
+        ],
+        "steps": 2,
+        "model_calls": 2,
+        "states": [
+          "plan",
+          "act",
+          "observe",
+          "observe",
+          "plan",
+          "answer"
+        ]
+      }
+    },
+    {
+      "id": "k-same-tool-twice-two-steps",
+      "note": "同一个工具在两轮里各调一次：两轮互不干扰，第一轮的参数不该被第二轮覆盖",
+      "messages": [
+        "先查甲再查乙"
+      ],
+      "registry": [
+        "lookup"
+      ],
+      "script": [
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "甲"
+          }
+        },
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "乙"
+          }
+        },
+        {
+          "text": "两个都查了"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "lookup",
+          "lookup"
+        ],
+        "steps": 2,
+        "model_calls": 3,
+        "args": {
+          "lookup": {
+            "q": "甲"
+          }
+        },
+        "final_contains": [
+          "都查了"
+        ]
+      }
+    },
+    {
+      "id": "k-unknown-tool-then-valid",
+      "note": "模型先幻觉一个不存在的工具：要回灌「不存在」并让它在下一轮改用真工具，而不是整轮报错",
+      "messages": [
+        "先随便试试"
+      ],
+      "registry": [
+        "lookup"
+      ],
+      "script": [
+        {
+          "tool": "nope",
+          "args": {}
+        },
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "丙"
+          }
+        },
+        {
+          "text": "换了个能用的，查到了丙"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "nope",
+          "lookup"
+        ],
+        "steps": 2,
+        "model_calls": 3,
+        "second_call_sees_failure": true,
+        "final_contains": [
+          "丙"
+        ]
+      }
+    },
+    {
+      "id": "k-missing-required-arg-is-fed-back",
+      "note": "required 参数没给：工具要回一条可读失败，模型据此解释，不崩",
+      "messages": [
+        "查一下（我会忘说查什么）"
+      ],
+      "registry": [
+        "lookup"
+      ],
+      "script": [
+        {
+          "tool": "lookup",
+          "args": {}
+        },
+        {
+          "text": "缺少查询内容，你要查什么？"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "lookup"
+        ],
+        "steps": 1,
+        "model_calls": 2,
+        "second_call_sees_failure": true,
+        "final_contains": [
+          "缺少"
+        ]
+      }
+    },
+    {
+      "id": "k-broken-json-args",
+      "note": "工具的 arguments 是坏 JSON（真实模型偶尔会吐）：上层要当空参数容错，不能抛",
+      "messages": [
+        "用坏参数试试"
+      ],
+      "registry": [
+        "lookup"
+      ],
+      "script": [
+        {
+          "tool": "lookup",
+          "raw_args": "{"
+        },
+        {
+          "text": "参数坏了，你再说一次要查什么"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "lookup"
+        ],
+        "steps": 1,
+        "model_calls": 2,
+        "second_call_sees_failure": true,
+        "final_contains": [
+          "参数"
+        ]
+      }
+    },
+    {
+      "id": "k-empty-registry-still-answers",
+      "note": "没有任何工具可用时也能正常回答（不出现 act/observe）",
+      "messages": [
+        "陪我聊两句"
+      ],
+      "registry": [],
+      "script": [
+        {
+          "text": "没有工具也能答"
+        }
+      ],
+      "expect": {
+        "tools": [],
+        "steps": 0,
+        "states": [
+          "plan",
+          "answer"
+        ],
+        "final_contains": [
+          "没有工具也能答"
+        ]
+      }
+    },
+    {
+      "id": "k-two-rounds-two-tools",
+      "note": "两轮工具各自单独一步：状态序列必须是 plan→act→observe ×2 再 answer",
+      "messages": [
+        "先查天气，再查丁"
+      ],
+      "registry": [
+        "weather",
+        "lookup"
+      ],
+      "script": [
+        {
+          "tool": "weather",
+          "args": {}
+        },
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "丁"
+          }
+        },
+        {
+          "text": "两步都做完了"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "weather",
+          "lookup"
+        ],
+        "steps": 2,
+        "model_calls": 3,
+        "states": [
+          "plan",
+          "act",
+          "observe",
+          "plan",
+          "act",
+          "observe",
+          "plan",
+          "answer"
+        ]
+      }
+    },
+    {
+      "id": "k-max-steps-one-still-safe",
+      "note": "上限只给 1 步：用完就明说「连续尝试了 1 步」，不许静默截断、也不许再调一次模型",
+      "messages": [
+        "查戊"
+      ],
+      "registry": [
+        "lookup"
+      ],
+      "max_steps": 1,
+      "script": [
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "戊"
+          }
+        }
+      ],
+      "expect": {
+        "steps": 1,
+        "model_calls": 1,
+        "final_contains": [
+          "1 步"
+        ],
+        "states": [
+          "plan",
+          "act",
+          "observe",
+          "degrade"
+        ]
+      }
+    },
+    {
+      "id": "k-budget-exhausted-after-tool-round",
+      "note": "工具那一轮就烧超了预算：**下一步开始前**拦住，并且这句话要能被人读懂",
+      "messages": [
+        "查己"
+      ],
+      "registry": [
+        "lookup"
+      ],
+      "budget": 100,
+      "script": [
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "己"
+          },
+          "spend": 120
+        },
+        {
+          "text": "不该走到这里"
+        }
+      ],
+      "expect": {
+        "model_calls": 1,
+        "final_contains": [
+          "token 预算"
+        ],
+        "final_not_contains": [
+          "不该走到这里"
+        ],
+        "states": [
+          "plan",
+          "act",
+          "observe",
+          "plan",
+          "degrade"
+        ]
+      }
+    },
+    {
+      "id": "k-two-turns-history",
+      "note": "多轮：第二轮调用必须带着第一轮的问答（否则就是「每句话都从零开始」）",
+      "turns": [
+        [
+          "第一句"
+        ],
+        [
+          "第二句"
+        ]
+      ],
+      "registry": [],
+      "script": [
+        {
+          "text": "第一答"
+        },
+        {
+          "text": "第二答"
+        }
+      ],
+      "expect": {
+        "model_calls": 2,
+        "messages_in_second_call_min": 3,
+        "final_contains": [
+          "第二答"
+        ]
+      }
+    },
+    {
+      "id": "k-slow-tools-run_concurrently",
+      "note": "两个各 200ms 的工具并发跑：总耗时要在 200ms 量级而不是 400ms（并发退化成串行会在这里红）",
+      "messages": [
+        "两个慢查一起做"
+      ],
+      "registry": [
+        "slow"
+      ],
+      "script": [
+        {
+          "tools": [
+            {
+              "tool": "slow",
+              "args": {
+                "delay": 0.2
+              }
+            },
+            {
+              "tool": "slow",
+              "args": {
+                "delay": 0.2
+              }
+            }
+          ]
+        },
+        {
+          "text": "两个慢查都完了"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "slow",
+          "slow"
+        ],
+        "steps": 2,
+        "model_calls": 2,
+        "max_ms": 400
+      }
+    },
+    {
+      "id": "k-single-slow-tool-takes-its-time",
+      "note": "单个慢工具的耗时下限：低于 180ms 说明工具根本没真跑（测试桩把 asyncio.sleep 吞了）",
+      "messages": [
+        "慢查一个"
+      ],
+      "registry": [
+        "slow"
+      ],
+      "script": [
+        {
+          "tool": "slow",
+          "args": {
+            "delay": 0.2
+          }
+        },
+        {
+          "text": "慢查完了"
+        }
+      ],
+      "expect": {
+        "steps": 1,
+        "min_ms": 180,
+        "max_ms": 2000
+      }
+    },
+    {
+      "id": "k-tool-error-then-recover",
+      "note": "工具炸了之后换个工具接着干：失败不是终点，只是这一条路不通",
+      "messages": [
+        "先用会炸的查，不行就换个"
+      ],
+      "registry": [
+        "boom",
+        "lookup"
+      ],
+      "script": [
+        {
+          "tool": "boom",
+          "args": {}
+        },
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "庚"
+          }
+        },
+        {
+          "text": "换一个查到了庚"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "boom",
+          "lookup"
+        ],
+        "steps": 2,
+        "model_calls": 3,
+        "second_call_sees_failure": true,
+        "final_contains": [
+          "庚"
+        ]
+      }
+    },
+    {
+      "id": "k-final-answer-does-not-leak-exception",
+      "note": "工具内部异常不许漏到最终回答里：用户不该看到 RuntimeError / Traceback",
+      "messages": [
+        "用那个会炸的"
+      ],
+      "registry": [
+        "boom"
+      ],
+      "script": [
+        {
+          "tool": "boom",
+          "args": {}
+        },
+        {
+          "text": "那个工具现在用不了，先别用它"
+        }
+      ],
+      "expect": {
+        "steps": 1,
+        "final_not_contains": [
+          "RuntimeError",
+          "Traceback",
+          "工具内部炸了"
+        ]
+      }
+    },
+    {
+      "id": "k-number-arg-passes-through",
+      "note": "数字参数原样到达工具（不要被字符串化后面目全非），并且工具能正常处理",
+      "messages": [
+        "查 123"
+      ],
+      "registry": [
+        "lookup"
+      ],
+      "script": [
+        {
+          "tool": "lookup",
+          "args": {
+            "q": 123
+          }
+        },
+        {
+          "text": "查到 123 了"
+        }
+      ],
+      "expect": {
+        "steps": 1,
+        "args": {
+          "lookup": {
+            "q": 123
+          }
+        },
+        "final_contains": [
+          "123"
+        ]
+      }
+    },
+    {
+      "id": "k-echo-content-is-what_the_model_sees",
+      "note": "工具返回的内容要原样回灌到下一次调用的上下文里（这是「模型看得见结果」的最小证明）",
+      "messages": [
+        "把这句话传一遍"
+      ],
+      "registry": [
+        "echo"
+      ],
+      "script": [
+        {
+          "tool": "echo",
+          "args": {
+            "text": "海内存知己"
+          }
+        },
+        {
+          "text": "你说的是海内存知己"
+        }
+      ],
+      "expect": {
+        "steps": 1,
+        "messages_in_second_call_min": 3,
+        "final_contains": [
+          "海内存知己"
+        ]
+      }
+    },
+    {
+      "id": "k-three-tools-one-step",
+      "note": "一轮三个工具：三个 observe 事件一个不少，顺序仍按模型给的顺序",
+      "messages": [
+        "三件事一起办"
+      ],
+      "registry": [
+        "weather",
+        "lookup",
+        "echo"
+      ],
+      "script": [
+        {
+          "tools": [
+            {
+              "tool": "weather",
+              "args": {}
+            },
+            {
+              "tool": "lookup",
+              "args": {
+                "q": "辛"
+              }
+            },
+            {
+              "tool": "echo",
+              "args": {
+                "text": "壬"
+              }
+            }
+          ]
+        },
+        {
+          "text": "三件都办了"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "weather",
+          "lookup",
+          "echo"
+        ],
+        "steps": 3,
+        "model_calls": 2,
+        "states": [
+          "plan",
+          "act",
+          "observe",
+          "observe",
+          "observe",
+          "plan",
+          "answer"
+        ]
+      }
+    },
+    {
+      "id": "k-model-failure-after-tool-step",
+      "note": "工具那步成功了、下一步模型挂了：已跑过的工具结果不能丢，同时要给一句人话",
+      "messages": [
+        "查天气"
+      ],
+      "registry": [
+        "weather"
+      ],
+      "script": [
+        {
+          "tool": "weather",
+          "args": {}
+        },
+        {
+          "fail": "连接被重置"
+        }
+      ],
+      "expect": {
+        "readable_error": true,
+        "steps": 1,
+        "final_not_contains": [
+          "Traceback"
+        ],
+        "states": [
+          "plan",
+          "act",
+          "observe",
+          "plan",
+          "degrade"
+        ]
+      }
+    },
+    {
+      "id": "k-extra-arg-keys-tolerated",
+      "note": "模型多塞了 schema 之外的参数键：工具要忽略而不是报错（真实模型很常见）",
+      "messages": [
+        "查癸"
+      ],
+      "registry": [
+        "lookup"
+      ],
+      "script": [
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "癸",
+            "extra": "多余"
+          }
+        },
+        {
+          "text": "查到了癸"
+        }
+      ],
+      "expect": {
+        "steps": 1,
+        "args": {
+          "lookup": {
+            "q": "癸"
+          }
+        },
+        "final_contains": [
+          "癸"
+        ]
+      }
+    },
+    {
+      "id": "k-two-tool-rounds-then_answer",
+      "note": "两轮工具（第一轮两个、第二轮一个）共三次调用，最后收敛成一句回答",
+      "messages": [
+        "先查两件，再查一件"
+      ],
+      "registry": [
+        "lookup",
+        "weather"
+      ],
+      "script": [
+        {
+          "tools": [
+            {
+              "tool": "lookup",
+              "args": {
+                "q": "a1"
+              }
+            },
+            {
+              "tool": "weather",
+              "args": {}
+            }
+          ]
+        },
+        {
+          "tools": [
+            {
+              "tool": "lookup",
+              "args": {
+                "q": "a2"
+              }
+            }
+          ]
+        },
+        {
+          "text": "两轮四次都做完"
+        }
+      ],
+      "expect": {
+        "tools": [
+          "lookup",
+          "weather",
+          "lookup"
+        ],
+        "steps": 3,
+        "model_calls": 3,
+        "args": {
+          "lookup": {
+            "q": "a1"
+          }
+        }
+      }
+    },
+    {
+      "id": "k-whitespace-arg-is_rejected",
+      "note": "参数只有空格：要当成「没填」处理并回一条可读失败，而不是拿空格去查",
+      "messages": [
+        "查空白"
+      ],
+      "registry": [
+        "lookup"
+      ],
+      "script": [
+        {
+          "tool": "lookup",
+          "args": {
+            "q": "   "
+          }
+        },
+        {
+          "text": "空参数被拒了，你要查什么"
+        }
+      ],
+      "expect": {
+        "steps": 1,
+        "second_call_sees_failure": true,
+        "final_contains": [
+          "空参数"
+        ]
+      }
+    },
+    {
+      "id": "k-second-turn-failure-keeps-first-round",
+      "note": "两轮对话里第二轮模型挂了：第一轮的回答已经入了历史，第二轮只报这次的错",
+      "turns": [
+        [
+          "查天气"
+        ],
+        [
+          "再来一次"
+        ]
+      ],
+      "registry": [
+        "weather"
+      ],
+      "script": [
+        {
+          "tool": "weather",
+          "args": {}
+        },
+        {
+          "text": "晴"
+        },
+        {
+          "fail": "超时了"
+        }
+      ],
+      "expect": {
+        "model_calls": 3,
+        "readable_error": true,
+        "final_not_contains": [
+          "Traceback"
+        ]
+      }
+    }
+  ]
+}
