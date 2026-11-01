@@ -5,7 +5,6 @@
 
 一个住在桌面上 karo。
 目前还有很多小功能未完善或开发，后续有时间更新
-想法建议-> 2681338623@qq.com
 
 
 
@@ -22,8 +21,7 @@
 - **约束落在代码里。** 忌口、时间上限、工具白名单由服务端强制合并，提示词只是让模型知道有这回事。
 
 过程记录：每步的需求与理由在 `docs/DECISIONS.md`，实测并发与耗时在 `docs/PERF.md`，
-一次完整复盘在 `docs/FAILURES.md`，规模与数据量在 `docs/SCALE.md` ——
-**这四份都是本机开发笔记，不进仓库**（仓库只放项目本体、环境配置与测试）。
+一次完整复盘在 `docs/FAILURES.md`，规模与数据量在 `docs/SCALE.md` 。
 
 ## 看看它长什么样
 
@@ -31,7 +29,7 @@
 
 <p align="center"><em>桌宠本体。点头顶的轮盘是几个子功能：菜谱、签到、邮件、出行。</em></p>
 
-<p align="center"><img src=".github/assets/02-travel-form.png" width="560" alt="出行：自己填"></p>
+<p align="center"><img src=".github/assets/02-travel-form.png" width="560" alt="出行"></p>
 
 <p align="center"><em>出行有两种进入方式，「聊聊」是主路，也可以自己填。</em></p>
 
@@ -57,7 +55,7 @@ copy .env.example .env      # 至少填 DEEPSEEK_API_KEY、HEFENG_API_HOST / HEF
 .venv\Scripts\python.exe -m uvicorn main:app --reload
 ```
 
-浏览器打开 <http://127.0.0.1:8000>，点屏幕中间的小人。
+浏览器打开 <http://127.0.0.1:8000>。
 
 默认只监听本机，鉴权默认关着：`AUTH_TOKENS` 留空时就是单机模式，`session_id` 即全部凭据，
 谁连得上谁就能读写任意会话。自己用足够，别把端口直接暴露出去。
