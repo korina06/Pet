@@ -27,19 +27,11 @@
 
 <p align="center"><img src=".github/assets/01-pet.png" width="420" alt="桌宠本体与轮盘"></p>
 
-<p align="center"><em>桌宠本体。点头顶的轮盘是几个子功能：菜谱、签到、邮件、出行。</em></p>
-
 <p align="center"><img src=".github/assets/02-travel-form.png" width="560" alt="出行"></p>
-
-<p align="center"><em>出行有两种进入方式，「聊聊」是主路，也可以自己填。</em></p>
 
 <p align="center"><img src=".github/assets/03-travel-plan.png" width="640" alt="出行：计划概览与地图"></p>
 
-<p align="center"><em>计划概览：每天的点位在地图上连线，左下角会明说地图没加载出来，而不是白着。</em></p>
-
 <p align="center"><img src=".github/assets/04-recipe-chat.png" width="640" alt="菜谱助手"></p>
-
-<p align="center"><em>菜谱助手：右侧勾标签约束口味，卡片按 id 回库取，价格和热量这类没有数据源的字段干脆不显示。</em></p>
 
 ## 跑起来
 
