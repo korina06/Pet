@@ -103,8 +103,9 @@ function pinDaytime(dom, stamp = '2026-10-28T14:00:00+08:00') {
 }
 
 /**
- * 失败时最想知道的两件事：气泡那两个节点到底建出来没有、自动收有没有被关掉。
- * 两者的表现都是"气泡不出现"，但原因完全不同（DOM 桩没建出节点 vs 气泡被立刻收走）。
+ * 失败时最想知道的三件事：气泡那两个节点到底建出来没有、自动收有没有被关掉、
+ * 后台查新这一轮停在哪一步。三者的表现都是"气泡不出现"，但原因完全不同
+ * （DOM 桩没建出节点 / 气泡被立刻收走 / 查新自己提前返回或抛错）。
  */
 function diagnose(dom, tag) {
   const note = dom.byId.get('pet-note');
@@ -112,10 +113,11 @@ function diagnose(dom, tag) {
   const bound = typeof dom.windowStub.__petNoteDebug === 'function'
     ? dom.windowStub.__petNoteDebug()
     : '(app.js 没有暴露 __petNoteDebug)';
+  const diag = dom.windowStub.__petMailDiag || '(app.js 没写 __petMailDiag)';
   console.log(
     `  诊断[${tag}] pet-note=${Boolean(note)} pet-note-text=${Boolean(text)}`
     + ` hidden=${note ? note.hidden : 'n/a'} sticky=${Boolean(dom.windowStub.__petNoteSticky)}`
-    + ` app绑定=${JSON.stringify(bound)}`
+    + ` app绑定=${JSON.stringify(bound)} 查新=${diag}`
   );
   return { note, text };
 }

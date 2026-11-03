@@ -3832,29 +3832,39 @@
     return subject.length > 16 ? `${subject.slice(0, 16)}…` : subject;
   }
 
+  /** 后台查新这一轮停在哪一步。
+   *  只为一件事：`pollMailOnce` 抛错是故意吞掉的（后台动作不打扰用户），吞掉之后
+   *  界面上"没冒泡"这一个现象对应五六种原因（没登入 / 没新邮件 / 都提醒过了 / 静默 /
+   *  真的抛了），从外面全靠猜。CI 上就猜错过一次：同一份代码本机绿、runner 上红，
+   *  除了"没冒泡"什么都拿不到。这里把原因留在一个变量上，桩读它打进诊断行。 */
+  function mailDiag(note) {
+    window.__petMailDiag = String(note);
+  }
+
   async function pollMailOnce() {
     const watch = state.mailWatch;
     if (watch.busy) return;
+    mailDiag('开始 busy=false');
 
     // 静默时段攒下的先处理：过了 8 点，第一轮就把它说出来，然后清零
     const pending = pendingMailCount();
     if (pending > 0) {
-      if (isQuietHour()) return;
+      if (isQuietHour()) { mailDiag(`有 ${pending} 封攒着，但还在静默时段`); return; }
       setPendingMailCount(0);
       showPetNote(`夜里来了 ${pending} 封新邮件`, () => { void openMailAt(0); });
     }
 
     // 没启动（没登入 / 已退出）的时候后台查新必须是哑的：不弹气泡、不动界面、不报错
-    if (!state.mailWatch.armed) return;
+    if (!state.mailWatch.armed) { mailDiag('看新没启动（没登入或已退出）'); return; }
 
     watch.busy = true;
     try {
       const status = await apiFetch(
         `${API}/mail/status?session_id=${encodeURIComponent(sessionId())}`
       );
-      if (!status.ok) return;
+      if (!status.ok) { mailDiag(`status 不是 2xx：${status.status}`); return; }
       const info = await status.json();
-      if (!info.logged_in) return;
+      if (!info.logged_in) { mailDiag('status 说没登入'); return; }
 
       const since = mailLastUid();
       // `watch=1` 是给这一条请求做的标记（第 198 步）：邮箱窗口自己也会打 /mail/check
@@ -3865,11 +3875,15 @@
         `${API}/mail/check?session_id=${encodeURIComponent(sessionId())}`
         + `&folder=inbox&since_uid=${since}&watch=1`
       );
-      if (!response.ok) return;
+      if (!response.ok) { mailDiag(`check 不是 2xx：${response.status}`); return; }
       const data = await response.json();
       const fresh = (Array.isArray(data.messages) ? data.messages : [])
         .filter((message) => Number(message.uid) > since);
-      if (!fresh.length) return;
+      if (!fresh.length) {
+        const got = Array.isArray(data.messages) ? data.messages.length : '不是数组';
+        mailDiag(`没有 since=${since} 之后的新邮件（收到 ${got} 封）`);
+        return;
+      }
 
       // 游标先往前走：不管这轮冒不冒泡，同一封都不该被再处理一次
       const newest = Math.max(...fresh.map((message) => Number(message.uid)));
@@ -3877,16 +3891,20 @@
 
       const notified = new Set(mailNotifiedUids());
       const unseen = fresh.filter((message) => !notified.has(Number(message.uid)));
-      if (!unseen.length) return;
+      if (!unseen.length) { mailDiag('这几封之前提醒过了'); return; }
       rememberNotified(unseen.map((message) => message.uid));
 
       if (isQuietHour()) {
         setPendingMailCount(pendingMailCount() + unseen.length);   // 规则 1：只记账
+        mailDiag(`静默时段：记了 ${unseen.length} 封的账`);
         return;
       }
+      mailDiag(`冒泡：${unseen.length} 封`);
       announceMail(unseen);
-    } catch (_) {
-      // 断网 / 服务重启 / 登入失效 —— 后台动作一律不打扰用户
+    } catch (error) {
+      // 断网 / 服务重启 / 登入失效 —— 后台动作一律不打扰用户。
+      // 但原因要留痕，不然下次又只能靠"没冒泡"这一个现象猜。
+      mailDiag(`抛错：${error && error.message ? error.message : error}`);
     } finally {
       watch.busy = false;
     }
