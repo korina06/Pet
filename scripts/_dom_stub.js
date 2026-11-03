@@ -270,9 +270,21 @@ function bootApp(dom, fetchImpl) {
   );
 }
 
-/** 等几个微任务：`app.js` 里的 async 初始化（如 loadTools）跑完。 */
+/** 等 `app.js` 里的 async 链跑完。
+ *
+ *  以前每轮只 `await null`（纯微任务）。第 274 步那次 CI 红说明这样不够稳：
+ *  同一份代码本机（node 24）全绿、runner（node 22）红，症状是气泡不出现、
+ *  pending 没记账、`/mail/check` 一次都没发出去。把这里的等待砍到十分之一，
+ *  本机就能复现出**一模一样**的症状 —— 差的是"让出事件循环的次数"，不是逻辑。
+ *  所以每轮补一次 `setImmediate`：把这条链排队的微任务和已就绪的宏任务都放完
+ *  再返回。桩里没有真实定时器（setTimeout/setInterval 都是立即执行），
+ *  因此这一步不会改变任何用例的语义，只是把"等多久"从版本相关变成版本无关。
+ */
 async function settle(ticks = 3) {
-  for (let i = 0; i < ticks; i += 1) await null;
+  for (let i = 0; i < ticks; i += 1) {
+    await null;
+    await new Promise((resolve) => { setImmediate(resolve); });
+  }
 }
 
 module.exports = {
