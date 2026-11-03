@@ -62,7 +62,12 @@ jobs:
         # 第 80 步之前这里只有前一条，于是出现过一个真实情况：
         # 我改了识图路由，check_frontend 全绿，而 pytest 里两条挂了 ——
         # 那正是"CI 绿 ≠ 有回归保护"。
-        run: python -m pytest -q
+        #
+        # 第 277 步：不再直接调 pytest，而是走 scripts/pytest_report.py。
+        # 它照样跑 pytest、照样返回 pytest 的退出码，只是顺手把失败的用例
+        # 翻成 `::error` annotation —— run/job 日志要 admin 权限才读得到
+        # （第 274 步正因为这样，红了 16 次都只能猜）。
+        run: python scripts/pytest_report.py
 
   # 真浏览器烟测（第 122 步 / 评价7 P1-2）。
   #

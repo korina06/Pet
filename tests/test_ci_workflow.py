@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github" / "workflows" / "checks.yml"
+REPORTER = ROOT / "scripts" / "pytest_report.py"
 
 
 def _workflow() -> str:
@@ -61,3 +63,54 @@ def test_pytest_and_its_asyncio_plugin_are_pinned():
     assert all("==" in dep for dep in deps), f"依赖要钉版本，实际：{deps}"
     for name in ("pytest==", "pytest-asyncio=="):
         assert any(dep.startswith(name) for dep in deps), f"缺少钉死的 {name}"
+
+
+def test_pytest_step_goes_through_the_annotation_wrapper():
+    """pytest 那一步必须走壳，不能直接调 `python -m pytest`（第 277 步）。
+
+    理由不是洁癖：CI 的 run/job 日志要仓库 admin 权限才读得到（第 274 步，
+    连红 16 次都只能猜）。check_frontend.py 会自己打 `::error`，
+    pytest 不会——所以套一层，把失败的用例名送到 Actions 页面和 annotations 接口上。
+    """
+    text = _workflow()
+
+    assert "pytest_report.py" in text, "pytest 那一步要走 scripts/pytest_report.py"
+
+
+def _parse(xml_text: str):
+    spec = importlib.util.spec_from_file_location("_pytest_report_for_test", REPORTER)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.parse_failures(xml_text)
+
+
+def test_junit_failures_become_annotations():
+    """纯函数进 xml、出 `文件:行::用例 消息`。
+
+    只测这个函数、不真跑 pytest：这台开发机上 pytest 起不来
+    （临时目录删不掉，WinError 5），字符串进出才验得到。
+    """
+    xml_text = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="pytest" tests="3" failures="1" errors="1">
+  <testcase classname="tests.test_a" name="test_ok" file="tests/test_a.py" line="3" time="0.01"/>
+  <testcase classname="tests.test_a" name="test_bad" file="tests/test_a.py" line="9" time="0.02">
+    <failure message="assert 1 == 2&#10;more detail">traceback…</failure>
+  </testcase>
+  <testcase classname="tests.test_b" name="test_boom" file="tests/test_b.py" line="17" time="0.0">
+    <error message="RuntimeError: boom">traceback…</error>
+  </testcase>
+</testsuite></testsuites>"""
+
+    failures = _parse(xml_text)
+
+    assert len(failures) == 2, f"只该报失败的，实际：{failures}"
+    assert failures[0].startswith("tests/test_a.py:9::tests.test_a::test_bad "), failures[0]
+    assert "assert 1 == 2 more detail" in failures[0], "消息要压成单行（换行会截断 annotation）"
+    assert failures[1].startswith("tests/test_b.py:17::tests.test_b::test_boom "), failures[1]
+
+
+def test_broken_report_is_not_fatal():
+    """报告残缺时返回空列表，不能让壳自己崩掉（退出码必须是 pytest 的）。"""
+    assert _parse("这不是 xml") == []
+
