@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -53,3 +54,29 @@ def test_mail_notice_behaviour():
         "退出之后后台不再查新",
     ):
         assert label in output, f"缺少断言 {label}：\n{output}"
+
+
+@pytest.mark.skipif(NODE is None, reason="需要 Node 才能跑行为验证")
+def test_mail_notice_behaviour_does_not_depend_on_the_machine_timezone():
+    """第 276 步：CI（runner 是 UTC）连红 17 次、本机（UTC+8）一直绿，根因是时区。
+
+    `isQuietHour()` 读的是 `getHours()`，也就是**本地钟点**；而验证脚本以前给
+    `__petMailNow` 的是一个带 `+08:00` 的绝对时刻。在 UTC 的机器上 14:00 被换算成
+    06:00，落进静默时段（22:00–08:00），"白天该冒泡"于是变成"静默只记账"，
+    7 条断言一起挂，而本机永远看不到。
+
+    所以这条守卫把 CI 的时区条件搬到本地：同一个脚本在 `TZ=UTC` 下也必须全绿。
+    没有它，下次谁再往钩子里塞绝对时刻，本地依然是绿的。
+    """
+    env = dict(os.environ, TZ="UTC")
+    completed = subprocess.run(
+        [NODE, str(VERIFY_SCRIPT)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=180,
+        env=env,
+    )
+    output = (completed.stdout or "") + (completed.stderr or "")
+    assert completed.returncode == 0, "TZ=UTC 下邮件提醒行为验证未通过：\n" + output
+    assert "全部通过" in output, output

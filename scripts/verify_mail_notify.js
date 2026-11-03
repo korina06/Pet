@@ -90,14 +90,21 @@ async function openMailWindow(dom, byId) {
 }
 
 /**
- * 把"现在"钉在白天 14:00，并让气泡不自动收。
+ * 把"现在"钉在**本地钟点** 14:00，并让气泡不自动收。
  *
  * 两个都是给测试留的口子（app.js 里注释写了为什么）：
  * - 时间不钉住，静默时段那条规则就只能在凌晨测绿；
  * - 不关掉自动收，桩里 `setTimeout` 会**立即**把气泡收起，"显示着的时候点它"测不到。
+ *
+ * 为什么按"本地分量"拼而不是传一个带时区的 ISO 串：`app.js` 的 `isQuietHour()` 读的是
+ * `getHours()`，那是**本地钟点**。以前这里传 `'2026-10-28T14:00:00+08:00'`——是一个绝对
+ * 时刻，在 UTC 的机器上换算成 06:00，正好落在静默时段（22:00–08:00）里，"白天该冒泡"
+ * 就变成了"静默只记账"。GitHub 的 windows-latest 是 UTC、本机是 UTC+8：同一份代码
+ * 本地绿、runner 红 7 条，全都是这一个原因（第 276 步）。用本地分量构造，
+ * 任何时区下 `getHours()` 都返回 14。
  */
-function pinDaytime(dom, stamp = '2026-10-28T14:00:00+08:00') {
-  const at = new Date(stamp).getTime();
+function pinDaytime(dom, hour = 14, minute = 0) {
+  const at = new Date(2026, 9, 28, hour, minute, 0, 0).getTime();
   dom.windowStub.__petMailNow = () => at;
   dom.windowStub.__petNoteSticky = true;
 }
@@ -196,9 +203,11 @@ async function scenarioQuietHours() {
   const dom = buildDom();
   const { byId } = dom;
 
-  // 把"现在"钉在 23:30（静默时段内）。app.js 通过 window.__petMailNow 取时间，
+  // 把"现在"钉在本地 23:30（静默时段内）。app.js 通过 window.__petMailNow 取时间，
   // 就是给这个场景留的口子 —— 否则这条规则只能在凌晨才能测绿。
-  const NIGHT = new Date('2026-10-28T23:30:00+08:00').getTime();
+  // 同样按本地分量拼：这条用例断言的就是"本地钟点落在静默区间"，给绝对时刻会在
+  // UTC 的机器上变成 15:30（非静默），整条用例失效（第 276 步）。
+  const NIGHT = new Date(2026, 9, 28, 23, 30, 0, 0).getTime();
   dom.windowStub.__petMailNow = () => NIGHT;
 
   bootApp(dom, mailFetch({ checkMessages: [NEW_MAIL] }));
@@ -217,7 +226,7 @@ async function scenarioQuietHours() {
   // 天亮之后（另开一份 DOM，时间设成 09:00），pending 应该被说出来
   const day = buildDom();
   const dayBy = day.byId;
-  const MORNING = new Date('2026-10-29T09:00:00+08:00').getTime();
+  const MORNING = new Date(2026, 9, 29, 9, 0, 0, 0).getTime();
   day.windowStub.__petMailNow = () => MORNING;
   day.windowStub.__petNoteSticky = true;
   day.windowStub.localStorage.setItem('pet.mail.pending', '1');
