@@ -942,6 +942,16 @@ def main() -> int:
         _safe_print(f"  ~ 跳过 {name}")
     for name, detail in failures:
         _safe_print(f"  - {name}: {detail}")
+
+    # 第 274 步：CI 上失败时，把「哪几条挂了」写成 workflow command annotation。
+    # 理由：Actions 的日志要展开两层才看得到，而 annotation 直接挂在失败的 step 上，
+    # 也能通过 `GET /check-runs/{id}/annotations` 拿到——上一轮就是卡在"看不到失败明细"。
+    # 只在 GitHub Actions 里输出，本机跑不会多出这些行。
+    if failures and os.environ.get("GITHUB_ACTIONS") == "true":
+        for name, detail in failures:
+            one_line = " ".join(str(detail).split())
+            _safe_print(f"::error title=check_frontend::{name}: {one_line}")
+
     return 1 if failures else 0
 
 
