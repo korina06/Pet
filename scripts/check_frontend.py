@@ -107,8 +107,6 @@ MODULES = (
     "test_eval_golden",
     # CI 配置自身的回归保护（第 80 步）：只读 YAML，纯标准库
     "test_ci_workflow",
-    # 容器化产物（第 195 步）：只读 Dockerfile / .dockerignore，纯标准库
-    "test_dockerfile",
     # 备份脚本与运维三件套（第 88 步）：纯标准库（sqlite3/zipfile）
     "test_backup_and_ops",
     # 对话消息落库（第 91 步 / A3）：纯标准库（sqlite3）
